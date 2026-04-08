@@ -1,0 +1,12 @@
+{
+  "apiBaseUrl": "http://192.168.202.142:3000/api/v1",
+  "wsUrl": "ws://192.168.202.142:3000/ws",
+  "features": {
+    "enableAI": true,
+    "enablePrintService": true,
+    "maxUploadSizeMB": 200,
+    "enableCommunity": true
+  },
+  "version": "2026-04-08T12:00:00Z",
+  "maintenance": false
+}

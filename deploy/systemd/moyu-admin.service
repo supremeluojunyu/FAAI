@@ -1,0 +1,15 @@
+[Unit]
+Description=Moyu Admin Web Service
+After=network.target
+
+[Service]
+Type=simple
+User=golden
+WorkingDirectory=/home/golden/FAAI/admin-web
+Environment=NVM_DIR=/home/golden/.nvm
+ExecStart=/bin/bash -lc '. "$NVM_DIR/nvm.sh" && npm run dev -- --host 0.0.0.0 --port 5173'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

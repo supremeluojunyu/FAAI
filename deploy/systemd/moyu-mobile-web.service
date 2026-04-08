@@ -1,0 +1,14 @@
+[Unit]
+Description=Moyu Mobile Flutter Web Preview
+After=network.target
+
+[Service]
+Type=simple
+User=golden
+WorkingDirectory=/home/golden/FAAI/mobile-app
+ExecStart=/usr/bin/python3 -m http.server 8091 --directory /home/golden/FAAI/mobile-app/build/web
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

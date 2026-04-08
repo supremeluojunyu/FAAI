@@ -1,0 +1,16 @@
+name: moyu_app
+description: 模宇宙 App
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.6.1
+  dio: ^5.7.0
+
+flutter:
+  uses-material-design: true

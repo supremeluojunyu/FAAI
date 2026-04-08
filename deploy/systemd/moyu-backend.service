@@ -1,0 +1,16 @@
+[Unit]
+Description=Moyu Backend Service
+After=network.target postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=golden
+WorkingDirectory=/home/golden/FAAI/backend
+Environment=NODE_ENV=production
+Environment=NVM_DIR=/home/golden/.nvm
+ExecStart=/bin/bash -lc '. "$NVM_DIR/nvm.sh" && npm run start'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

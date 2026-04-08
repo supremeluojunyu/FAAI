@@ -1,0 +1,311 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String     @id @default(uuid())
+  phone        String     @unique
+  passwordHash String?
+  nickname     String?
+  avatar       String?
+  bio          String?    @db.Text
+  role         Role       @default(BUYER)
+  balance      Decimal    @default(0) @db.Decimal(10, 2)
+  status       UserStatus @default(ACTIVE)
+  jpushRegId   String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  designerApplication DesignerApplication?
+  models       Model[]
+  orders       Order[]
+  demands      Demand[]
+  assignments  DemandAssignment[]
+  delivery     Delivery[]
+  posts        Post[]
+  comments     Comment[]
+  favorites    ModelFavorite[]
+  likes        ModelLike[]
+  postLikes    PostLike[]
+  notifications Notification[]
+  transactions Transaction[]
+  adminLogs    AdminLog[]
+}
+
+enum Role {
+  BUYER
+  DESIGNER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  BANNED
+}
+
+model DesignerApplication {
+  id         String            @id @default(uuid())
+  userId     String            @unique
+  user       User              @relation(fields: [userId], references: [id])
+  reason     String            @db.Text
+  portfolio  String[]
+  status     ApplicationStatus @default(PENDING)
+  reviewedAt DateTime?
+  reviewMsg  String?           @db.Text
+  createdAt  DateTime          @default(now())
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Model {
+  id            String      @id @default(uuid())
+  designerId    String
+  designer      User        @relation(fields: [designerId], references: [id])
+  title         String
+  description   String?     @db.Text
+  category      String
+  style         String
+  format        String
+  fileSize      Int
+  price         Decimal     @default(0) @db.Decimal(10, 2)
+  coverUrl      String
+  downloadUrl   String
+  viewCount     Int         @default(0)
+  likeCount     Int         @default(0)
+  favoriteCount Int         @default(0)
+  status        ModelStatus @default(DRAFT)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  orders        Order[]
+  favorites     ModelFavorite[]
+  likes         ModelLike[]
+}
+
+enum ModelStatus {
+  DRAFT
+  ON_SALE
+  OFF_SALE
+}
+
+model ModelFavorite {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  modelId   String
+  model     Model    @relation(fields: [modelId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, modelId])
+}
+
+model ModelLike {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  modelId   String
+  model     Model    @relation(fields: [modelId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([userId, modelId])
+}
+
+model Order {
+  id               String    @id @default(uuid())
+  buyerId          String
+  buyer            User      @relation(fields: [buyerId], references: [id])
+  modelId          String
+  model            Model     @relation(fields: [modelId], references: [id])
+  amount           Decimal   @db.Decimal(10, 2)
+  payStatus        PayStatus @default(UNPAID)
+  tradeNo          String?   @unique
+  downloadExpireAt DateTime?
+  createdAt        DateTime  @default(now())
+  paidAt           DateTime?
+}
+
+enum PayStatus {
+  UNPAID
+  PAID
+  REFUNDED
+}
+
+model Post {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  content      String     @db.Text
+  type         PostType   @default(TEXT)
+  topicTags    String[]
+  likeCount    Int        @default(0)
+  commentCount Int        @default(0)
+  status       PostStatus @default(PUBLISHED)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  comments     Comment[]
+  likes        PostLike[]
+}
+
+enum PostType {
+  TEXT
+  IMAGE
+  VIDEO
+  MODEL_PREVIEW
+}
+
+enum PostStatus {
+  PUBLISHED
+  DELETED
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  parentId  String?
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+}
+
+model PostLike {
+  id        String   @id @default(uuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId])
+}
+
+model Demand {
+  id                  String       @id @default(uuid())
+  buyerId             String
+  buyer               User         @relation(fields: [buyerId], references: [id])
+  title               String
+  description         String       @db.Text
+  type                DemandType
+  referenceImages     String[]
+  budget              Decimal      @db.Decimal(10, 2)
+  deadline            DateTime
+  status              DemandStatus @default(PENDING_PAY)
+  platformEscrowAmount Decimal?    @db.Decimal(10, 2)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  assignments         DemandAssignment[]
+  deliveries          Delivery[]
+}
+
+enum DemandType {
+  MODELING
+  PRINT
+  MODIFY
+}
+
+enum DemandStatus {
+  PENDING_PAY
+  WAITING_FOR_DESIGNER
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+model DemandAssignment {
+  id          String           @id @default(uuid())
+  demandId    String
+  demand      Demand           @relation(fields: [demandId], references: [id])
+  designerId  String
+  designer    User             @relation(fields: [designerId], references: [id])
+  status      AssignmentStatus @default(ACCEPTED)
+  acceptedAt  DateTime         @default(now())
+  completedAt DateTime?
+}
+
+enum AssignmentStatus {
+  ACCEPTED
+  REJECTED
+}
+
+model Delivery {
+  id         String   @id @default(uuid())
+  demandId   String
+  demand     Demand   @relation(fields: [demandId], references: [id])
+  designerId String
+  designer   User     @relation(fields: [designerId], references: [id])
+  fileUrl    String
+  comment    String?  @db.Text
+  createdAt  DateTime @default(now())
+}
+
+model Transaction {
+  id           String            @id @default(uuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id])
+  amount       Decimal           @db.Decimal(10, 2)
+  type         TransactionType
+  status       TransactionStatus @default(PENDING)
+  thirdPartyNo String?
+  remark       String?           @db.Text
+  createdAt    DateTime          @default(now())
+  completedAt  DateTime?
+}
+
+enum TransactionType {
+  RECHARGE
+  WITHDRAW
+  PAYMENT
+  INCOME
+  REFUND
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String
+  title     String
+  content   String   @db.Text
+  relatedId String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model SystemConfig {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Json
+  description String?  @db.Text
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+}
+
+model AdminLog {
+  id        String   @id @default(uuid())
+  adminId   String
+  admin     User     @relation(fields: [adminId], references: [id])
+  action    String
+  target    String?
+  detail    Json?
+  ip        String?
+  createdAt DateTime @default(now())
+}
