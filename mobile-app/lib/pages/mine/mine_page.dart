@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
 
 class MinePage extends StatelessWidget {
-  const MinePage({super.key});
+  const MinePage({super.key, required this.apiBaseUrl, required this.onLogout});
+  final String apiBaseUrl;
+  final VoidCallback onLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +25,16 @@ class MinePage extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           ...items.map((e) => Card(child: ListTile(title: Text(e), trailing: const Icon(Icons.chevron_right)))),
+          Card(
+            child: ListTile(
+              title: const Text('退出登录'),
+              trailing: const Icon(Icons.logout),
+              onTap: () async {
+                await AuthService(apiBaseUrl).logout();
+                onLogout();
+              },
+            ),
+          ),
         ],
       ),
     );

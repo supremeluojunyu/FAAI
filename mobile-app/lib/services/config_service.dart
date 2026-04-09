@@ -5,7 +5,10 @@ class ConfigService {
   final Dio _dio = Dio();
 
   Future<AppConfig> fetchConfig() async {
-    final resp = await _dio.get('https://config.yourdomain.com/app-config.json');
+    final resp = await _dio.get(
+      'http://192.168.3.13/app-config.json',
+      options: Options(responseType: ResponseType.json),
+    );
     return AppConfig.fromJson(resp.data as Map<String, dynamic>);
   }
 }

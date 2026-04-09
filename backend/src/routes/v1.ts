@@ -4,6 +4,8 @@ import { z } from "zod";
 import { env } from "../config/env";
 import { authRequired, adminRequired } from "../middlewares/auth";
 import { prisma } from "../models/prisma";
+import { sendSmsCode, verifySmsCode } from "../services/auth";
+import { getWechatOpenIdByCode } from "../services/wechat";
 import { fail, ok } from "../utils/response";
 
 export const v1Router = Router();
@@ -11,12 +13,14 @@ export const v1Router = Router();
 v1Router.post("/auth/send-code", async (req, res) => {
   const parsed = z.object({ phone: z.string().min(11) }).safeParse(req.body);
   if (!parsed.success) return fail(res, 1001, "参数错误");
-  return ok(res, { expire_sec: 60 });
+  const r = await sendSmsCode(parsed.data.phone);
+  return ok(res, { expire_sec: r.expireSec, ...(r.debugCode ? { debug_code: r.debugCode } : {}) });
 });
 
 v1Router.post("/auth/login", async (req, res) => {
   const parsed = z.object({ phone: z.string(), code: z.string() }).safeParse(req.body);
   if (!parsed.success) return fail(res, 1001, "参数错误");
+  if (!verifySmsCode(parsed.data.phone, parsed.data.code)) return fail(res, 1002, "验证码错误或已过期");
   const user = await prisma.user.upsert({
     where: { phone: parsed.data.phone },
     update: {},
@@ -24,6 +28,44 @@ v1Router.post("/auth/login", async (req, res) => {
   });
   const token = jwt.sign({ userId: user.id, role: user.role }, env.jwtSecret, { expiresIn: env.jwtExpiresIn } as jwt.SignOptions);
   return ok(res, { token, user });
+});
+
+v1Router.post("/auth/wechat/login", async (req, res) => {
+  const parsed = z.object({ code: z.string().min(1) }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 1001, "参数错误");
+
+  try {
+    const wx = await getWechatOpenIdByCode(parsed.data.code);
+    if (!wx.openid) return fail(res, 1002, "微信登录失败，未获取到 openid");
+
+    const existingByOpenId = await prisma.user.findUnique({ where: { wechatOpenId: wx.openid } });
+    const existingByUnionId =
+      wx.unionid ? await prisma.user.findUnique({ where: { wechatUnionId: wx.unionid } }) : null;
+    const found = existingByOpenId || existingByUnionId;
+
+    const user = found
+      ? await prisma.user.update({
+          where: { id: found.id },
+          data: { wechatOpenId: wx.openid, wechatUnionId: wx.unionid ?? found.wechatUnionId }
+        })
+      : await prisma.user.create({
+          data: {
+            phone: `wx_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+            role: "BUYER",
+            status: "ACTIVE",
+            nickname: "微信用户",
+            wechatOpenId: wx.openid,
+            wechatUnionId: wx.unionid
+          }
+        });
+
+    const token = jwt.sign({ userId: user.id, role: user.role }, env.jwtSecret, {
+      expiresIn: env.jwtExpiresIn
+    } as jwt.SignOptions);
+    return ok(res, { token, user, wechat: { openid: wx.openid, unionid: wx.unionid } });
+  } catch (e) {
+    return fail(res, 1002, e instanceof Error ? e.message : "微信登录失败");
+  }
 });
 
 v1Router.get("/user/profile", authRequired, async (req, res) => {
