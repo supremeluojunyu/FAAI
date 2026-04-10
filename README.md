@@ -34,6 +34,17 @@ git push origin v1.0.0
 
 在仓库页 **Releases** 中即可下载 APK。首次使用前请确认 **Settings → Actions → General** 中 Workflow 权限为默认（`GITHUB_TOKEN` 可写 contents）。
 
+**首次 CI 构建通常要 15～40 分钟**（安装 Android SDK、下载 Gradle/依赖）。Actions 里步骤长时间「转圈」时，点开该步骤展开日志，一般是在下载而非卡死。`v0.x` 标签会自动标记为 **Pre-release**。
+
+若你曾推送过旧版 workflow 导致失败，可修正后推送新 commit，再**移动标签**重新触发：
+
+```bash
+git push origin :refs/tags/v0.0.1   # 删除远程标签（可选）
+git tag -d v0.0.1
+git tag -a v0.0.1 -m "retry"
+git push origin v0.0.1
+```
+
 ## 新 Ubuntu 虚拟机一键部署
 
 ```bash

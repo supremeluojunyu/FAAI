@@ -1,5 +1,8 @@
-# 推送以 v 开头的标签（如 v1.0.0）时，自动构建 Android APK 并附加到 GitHub Release。
-# 用法：git tag v1.0.0 && git push origin v1.0.0
+# 推送以 v 开头的标签（如 v0.0.1）时，自动构建 Android APK 并附加到 GitHub Release。
+# 用法：git tag v0.0.1 && git push origin v0.0.1
+#
+# 说明：首次构建常需 15～40 分钟（下载 Android SDK、Gradle、依赖）。若长时间无输出，
+# 请在 Actions 日志里展开当前步骤查看是否在下载。
 
 name: Release Android APK
 
@@ -14,9 +17,7 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: mobile-app
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -28,25 +29,57 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # ubuntu-latest 不含完整 Android SDK；不显式安装时 flutter build apk 会隐式拉取，极易长时间「转圈」
+      - name: Install Android SDK (cmdline-tools)
+        run: |
+          set -euo pipefail
+          ANDROID_SDK_ROOT="$HOME/android-sdk"
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o /tmp/cmdline-tools.zip
+          unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
+          mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('mobile-app/**/*.gradle*', 'mobile-app/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
+      - name: Flutter doctor (verbose)
+        run: flutter doctor -v
+
       - name: Flutter pub get
+        working-directory: mobile-app
         run: flutter pub get
 
       - name: Build release APK
-        run: flutter build apk --release
+        working-directory: mobile-app
+        run: flutter build apk --release --verbose
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
           generate_release_notes: true
-          files: |
-            mobile-app/build/app/outputs/flutter-apk/app-release.apk
+        files: |
+          mobile-app/build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
