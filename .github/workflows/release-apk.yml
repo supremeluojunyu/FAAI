@@ -34,10 +34,17 @@ jobs:
         run: |
           set -euo pipefail
           ANDROID_SDK_ROOT="$HOME/android-sdk"
+          rm -rf "$ANDROID_SDK_ROOT"
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
           curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o /tmp/cmdline-tools.zip
-          unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
-          mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          unzip -q /tmp/cmdline-tools.zip -d /tmp/cmdline-unpack
+          if [ -d /tmp/cmdline-unpack/cmdline-tools ]; then
+            mv /tmp/cmdline-unpack/cmdline-tools "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          else
+            mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+            shopt -s dotglob
+            mv /tmp/cmdline-unpack/* "$ANDROID_SDK_ROOT/cmdline-tools/latest/"
+          fi
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
@@ -78,8 +85,10 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
           prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
+          draft: false
+          fail_on_unmatched_files: true
           generate_release_notes: true
-        files: |
-          mobile-app/build/app/outputs/flutter-apk/app-release.apk
+          files: |
+            mobile-app/build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

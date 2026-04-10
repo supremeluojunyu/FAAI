@@ -36,6 +36,8 @@ git push origin v1.0.0
 
 **首次 CI 构建通常要 15～40 分钟**（安装 Android SDK、下载 Gradle/依赖）。Actions 里步骤长时间「转圈」时，点开该步骤展开日志，一般是在下载而非卡死。`v0.x` 标签会自动标记为 **Pre-release**。
 
+若 Release 页面出现 **Draft** 且没有 `app-release.apk`，多半是旧版 workflow 里 `files` 缩进错误导致未上传附件；更新仓库后请在网页上 **删除该 Draft Release**，再按下面重打标签触发。
+
 若你曾推送过旧版 workflow 导致失败，可修正后推送新 commit，再**移动标签**重新触发：
 
 ```bash
