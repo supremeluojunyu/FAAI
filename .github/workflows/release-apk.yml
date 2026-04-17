@@ -10,6 +10,13 @@ on:
   push:
     tags:
       - "v*"
+  # 标签已存在但 Release/APK 被删时，可手动运行并指定标签补发
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "已有标签名（如 v0.0.2）"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -22,6 +29,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.release_tag) || github.ref }}
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -49,8 +58,14 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
           echo "$ANDROID_SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          # GITHUB_PATH 不作用于本 step 内当前 shell，需手动 export
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$ANDROID_SDK_ROOT/platform-tools:$PATH"
+          SDKM="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          # 在 pipefail 下 yes 可能 SIGPIPE，临时关闭 pipefail，仅检查 sdkmanager 结果
+          set +o pipefail
+          yes | "$SDKM" --sdk_root="$ANDROID_SDK_ROOT" --licenses >/dev/null
+          set -o pipefail
+          "$SDKM" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -82,13 +97,13 @@ jobs:
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref_name }}
+          name: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref_name }}
+          prerelease: ${{ startsWith(github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref_name, 'v0.') }}
           draft: false
           fail_on_unmatched_files: true
           generate_release_notes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          working_directory: mobile-app
           files: |
-            mobile-app/build/app/outputs/flutter-apk/app-release.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            build/app/outputs/flutter-apk/app-release.apk
