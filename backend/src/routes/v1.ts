@@ -10,6 +10,79 @@ import { fail, ok } from "../utils/response";
 
 export const v1Router = Router();
 
+type WorkbenchJobType = "PHOTO_TO_3D" | "UPLOAD_MODEL" | "FOOD_MOLD";
+type WorkbenchJobStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
+
+type WorkbenchResult = {
+  title: string;
+  description: string;
+  format: string;
+  fileSize: number;
+  coverUrl: string;
+  downloadUrl: string;
+  category: string;
+  style: string;
+};
+
+type WorkbenchJob = {
+  id: string;
+  userId: string;
+  type: WorkbenchJobType;
+  status: WorkbenchJobStatus;
+  createdAt: Date;
+  startedAt?: Date;
+  finishedAt?: Date;
+  durationSec?: number;
+  input: Record<string, unknown>;
+  result?: WorkbenchResult;
+  errorMessage?: string;
+  publishModelId?: string;
+};
+
+const workbenchJobs = new Map<string, WorkbenchJob>();
+const photoTo3dQuotaUsage = new Map<string, number>();
+
+function currentPeriodKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function photoTo3dLimitByRole(role: "BUYER" | "DESIGNER" | "ADMIN") {
+  if (role === "ADMIN") return 200;
+  if (role === "DESIGNER") return 50;
+  return 8;
+}
+
+function userPeriodQuotaKey(userId: string) {
+  return `${userId}:${currentPeriodKey()}`;
+}
+
+function enqueueMockJob(
+  job: WorkbenchJob,
+  buildResult: () => WorkbenchResult,
+  processMs: number
+) {
+  workbenchJobs.set(job.id, job);
+  setTimeout(() => {
+    const cur = workbenchJobs.get(job.id);
+    if (!cur) return;
+    cur.status = "RUNNING";
+    cur.startedAt = new Date();
+    workbenchJobs.set(job.id, cur);
+  }, 300);
+  setTimeout(() => {
+    const cur = workbenchJobs.get(job.id);
+    if (!cur) return;
+    cur.status = "SUCCESS";
+    cur.finishedAt = new Date();
+    if (cur.startedAt) {
+      cur.durationSec = Math.max(1, Math.round((cur.finishedAt.getTime() - cur.startedAt.getTime()) / 1000));
+    }
+    cur.result = buildResult();
+    workbenchJobs.set(job.id, cur);
+  }, processMs);
+}
+
 v1Router.post("/auth/send-code", async (req, res) => {
   const parsed = z.object({ phone: z.string().min(11) }).safeParse(req.body);
   if (!parsed.success) return fail(res, 1001, "参数错误");
@@ -187,6 +260,171 @@ v1Router.get("/orders", authRequired, async (req, res) => {
     orderBy: { createdAt: "desc" }
   });
   return ok(res, { list });
+});
+
+v1Router.get("/workbench/photo-to-3d/quota", authRequired, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.auth!.userId }, select: { role: true } });
+  if (!user) return fail(res, 1001, "用户不存在");
+  const key = userPeriodQuotaKey(req.auth!.userId);
+  const used = photoTo3dQuotaUsage.get(key) || 0;
+  const limit = photoTo3dLimitByRole(user.role);
+  return ok(res, { period: currentPeriodKey(), used, limit, remaining: Math.max(limit - used, 0) });
+});
+
+v1Router.post("/workbench/photo-to-3d/jobs", authRequired, async (req, res) => {
+  const parsed = z.object({
+    image_urls: z.array(z.string().min(1)).min(1).max(6),
+    title: z.string().optional()
+  }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 1001, "参数错误");
+  const user = await prisma.user.findUnique({ where: { id: req.auth!.userId }, select: { role: true } });
+  if (!user) return fail(res, 1001, "用户不存在");
+  const quotaKey = userPeriodQuotaKey(req.auth!.userId);
+  const used = photoTo3dQuotaUsage.get(quotaKey) || 0;
+  const limit = photoTo3dLimitByRole(user.role);
+  if (used >= limit) return fail(res, 3004, `本月可生成次数已用完（${used}/${limit}）`);
+  photoTo3dQuotaUsage.set(quotaKey, used + 1);
+
+  const jobId = `wb_photo_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const input = parsed.data;
+  enqueueMockJob(
+    {
+      id: jobId,
+      userId: req.auth!.userId,
+      type: "PHOTO_TO_3D",
+      status: "PENDING",
+      createdAt: new Date(),
+      input
+    },
+    () => ({
+      title: input.title || `拍照生成模型-${Date.now()}`,
+      description: `基于 ${input.image_urls.length} 张图片自动生成`,
+      format: "GLB",
+      fileSize: 15 * 1024 * 1024,
+      coverUrl: input.image_urls[0],
+      downloadUrl: `https://example.com/generated/photo3d/${jobId}.glb`,
+      category: "AI生成",
+      style: "自动"
+    }),
+    5500
+  );
+  return ok(res, { job_id: jobId });
+});
+
+v1Router.post("/workbench/upload-model/jobs", authRequired, async (req, res) => {
+  const parsed = z.object({
+    file_name: z.string().min(1),
+    format: z.enum(["GLB", "GLTF", "OBJ", "STL", "FBX"]),
+    file_size: z.coerce.number().positive(),
+    download_url: z.string().url(),
+    cover_url: z.string().url().optional(),
+    title: z.string().optional()
+  }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 1001, "参数错误");
+  const jobId = `wb_upload_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const input = parsed.data;
+  enqueueMockJob(
+    {
+      id: jobId,
+      userId: req.auth!.userId,
+      type: "UPLOAD_MODEL",
+      status: "PENDING",
+      createdAt: new Date(),
+      input
+    },
+    () => ({
+      title: input.title || input.file_name.replace(/\.[^.]+$/, ""),
+      description: "本地上传模型",
+      format: input.format,
+      fileSize: input.file_size,
+      coverUrl: input.cover_url || "https://picsum.photos/seed/upload-model/512/512",
+      downloadUrl: input.download_url,
+      category: "用户上传",
+      style: "原始"
+    }),
+    2200
+  );
+  return ok(res, { job_id: jobId });
+});
+
+v1Router.post("/workbench/food-mold/jobs", authRequired, async (req, res) => {
+  const parsed = z.object({
+    source_model_url: z.string().url(),
+    block_count: z.coerce.number().int().min(1).max(12),
+    title: z.string().optional(),
+    depth_mm: z.coerce.number().min(1).max(80).default(12)
+  }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 1001, "参数错误");
+  const jobId = `wb_mold_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const input = parsed.data;
+  enqueueMockJob(
+    {
+      id: jobId,
+      userId: req.auth!.userId,
+      type: "FOOD_MOLD",
+      status: "PENDING",
+      createdAt: new Date(),
+      input
+    },
+    () => ({
+      title: input.title || `食品模具-${Date.now()}`,
+      description: `阴刻深度 ${input.depth_mm}mm，分块 ${input.block_count} 块`,
+      format: "STL",
+      fileSize: 28 * 1024 * 1024,
+      coverUrl: "https://picsum.photos/seed/food-mold/512/512",
+      downloadUrl: `https://example.com/generated/food-mold/${jobId}.stl`,
+      category: "食品模具",
+      style: "阴刻方模"
+    }),
+    8000
+  );
+  return ok(res, { job_id: jobId });
+});
+
+v1Router.get("/workbench/jobs", authRequired, async (req, res) => {
+  const type = req.query.type ? String(req.query.type) as WorkbenchJobType : undefined;
+  const list = Array.from(workbenchJobs.values())
+    .filter((x) => x.userId === req.auth!.userId)
+    .filter((x) => (type ? x.type === type : true))
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return ok(res, { list });
+});
+
+v1Router.get("/workbench/jobs/:id", authRequired, async (req, res) => {
+  const job = workbenchJobs.get(req.params.id);
+  if (!job || job.userId !== req.auth!.userId) return fail(res, 1001, "任务不存在");
+  return ok(res, { job });
+});
+
+v1Router.post("/workbench/jobs/:id/publish", authRequired, async (req, res) => {
+  const parsed = z.object({
+    price: z.coerce.number().min(0).default(0),
+    title: z.string().optional()
+  }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 1001, "参数错误");
+  const job = workbenchJobs.get(req.params.id);
+  if (!job || job.userId !== req.auth!.userId) return fail(res, 1001, "任务不存在");
+  if (job.status !== "SUCCESS" || !job.result) return fail(res, 3005, "任务尚未完成，无法发布");
+  if (job.publishModelId) return ok(res, { model_id: job.publishModelId, already_published: true });
+
+  const model = await prisma.model.create({
+    data: {
+      designerId: req.auth!.userId,
+      title: parsed.data.title || job.result.title,
+      description: job.result.description,
+      category: job.result.category,
+      style: job.result.style,
+      format: job.result.format,
+      fileSize: job.result.fileSize,
+      price: parsed.data.price,
+      coverUrl: job.result.coverUrl,
+      downloadUrl: job.result.downloadUrl,
+      status: "DRAFT"
+    }
+  });
+  job.publishModelId = model.id;
+  workbenchJobs.set(job.id, job);
+  return ok(res, { model_id: model.id });
 });
 
 v1Router.post("/ai/photo-to-3d", authRequired, async (_req, res) => ok(res, { task_id: `ai_${Date.now()}`, preview_url: "" }));

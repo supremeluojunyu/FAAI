@@ -87,7 +87,7 @@ class _MainShellState extends State<MainShell> {
   List<Widget> get pages => [
         const HomePage(),
         const DemandPublishPage(),
-        const WorkbenchPage(),
+        WorkbenchPage(apiBaseUrl: widget.apiBaseUrl),
         const CommunityPage(),
         MinePage(apiBaseUrl: widget.apiBaseUrl, onLogout: widget.onLogout),
       ];
