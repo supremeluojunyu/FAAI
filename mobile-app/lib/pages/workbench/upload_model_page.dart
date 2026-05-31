@@ -52,7 +52,7 @@ class _UploadModelPageState extends State<UploadModelPage> {
           const Text("格式"),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            initialValue: _format,
+            value: _format,
             items: const ["GLB", "GLTF", "OBJ", "STL", "FBX"].map((x) => DropdownMenuItem(value: x, child: Text(x))).toList(),
             onChanged: (v) => setState(() => _format = v ?? "GLB"),
             decoration: const InputDecoration(border: OutlineInputBorder()),
