@@ -1,0 +1,12 @@
+[Unit]
+Description=Sync latest Moyu APK from GitHub Release
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=golden
+WorkingDirectory=/home/golden/FAAI
+Environment=PATH=/home/golden/.local/bin:/usr/bin:/bin
+EnvironmentFile=-/home/golden/FAAI/config/apk-sync.env
+ExecStart=/home/golden/.local/bin/node /home/golden/FAAI/scripts/sync-apk-download.mjs

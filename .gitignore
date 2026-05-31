@@ -19,3 +19,6 @@ backend/node_modules/
 admin-web/node_modules/
 mobile-app/build/
 mobile-app/.dart_tool/
+config/apk-sync.env
+config-server/public/download/app-release.apk
+config-server/public/download/version.json

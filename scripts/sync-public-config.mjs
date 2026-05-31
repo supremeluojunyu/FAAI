@@ -88,6 +88,12 @@ fs.writeFileSync(path.join(ROOT, "config-server/public/app-config.json"), JSON.s
 fs.writeFileSync(path.join(ROOT, "config/public-endpoint.json"), JSON.stringify(endpointMeta, null, 2) + "\n");
 fs.writeFileSync(path.join(ROOT, "mobile-app/lib/config/bootstrap_config.dart"), bootstrapDart);
 
+try {
+  execSync("node scripts/sync-apk-download.mjs", { cwd: ROOT, stdio: "inherit" });
+} catch {
+  console.warn("APK 同步跳过（可稍后运行 node scripts/sync-apk-download.mjs）");
+}
+
 console.log("已同步公网配置:");
 console.log("  FRP:", frp.frpcPath);
 console.log("  公网:", publicBase);

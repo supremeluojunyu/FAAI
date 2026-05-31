@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodically sync Moyu APK download
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
