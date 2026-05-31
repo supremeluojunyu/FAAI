@@ -1,12 +1,14 @@
 {
-  "apiBaseUrl": "http://192.168.3.13/api/v1",
-  "wsUrl": "ws://192.168.3.13/ws",
+  "apiBaseUrl": "http://124.220.4.69:8081/api/v1",
+  "wsUrl": "ws://124.220.4.69:8081/ws",
   "features": {
     "enableAI": true,
     "enablePrintService": true,
     "maxUploadSizeMB": 200,
     "enableCommunity": true
   },
-  "version": "2026-04-08T12:00:00Z",
-  "maintenance": false
+  "version": "2026-05-31T14:15:09.973Z",
+  "maintenance": false,
+  "publicBaseUrl": "http://124.220.4.69:8081",
+  "lanBaseUrl": "http://192.168.3.21"
 }

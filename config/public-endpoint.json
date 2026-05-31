@@ -1,0 +1,9 @@
+{
+  "generatedAt": "2026-05-31T14:15:09.973Z",
+  "frpcPath": "/home/golden/frp_0.52.3_linux_amd64/frpc.toml",
+  "publicBaseUrl": "http://124.220.4.69:8081",
+  "lanBaseUrl": "http://192.168.3.21",
+  "serverAddr": "124.220.4.69",
+  "remotePort": 8081,
+  "proxyName": "webFAFI"
+}

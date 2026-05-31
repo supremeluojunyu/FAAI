@@ -86,6 +86,9 @@ jobs:
       - name: Flutter doctor (verbose)
         run: flutter doctor -v
 
+      - name: Sync public config from FRP
+        run: node scripts/sync-public-config.mjs
+
       - name: Flutter pub get
         working-directory: mobile-app
         run: flutter pub get
