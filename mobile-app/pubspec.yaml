@@ -1,7 +1,7 @@
 name: moyu_app
 description: 模宇宙 App
 publish_to: "none"
-version: 0.3.0+3
+version: 0.0.3+4
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

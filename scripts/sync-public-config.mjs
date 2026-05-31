@@ -49,6 +49,7 @@ const appConfig = {
     enableCommunity: true,
   },
   version: now,
+  appVersion: "0.0.3",
   maintenance: false,
   publicBaseUrl: publicBase,
   lanBaseUrl: lanBase,
@@ -64,6 +65,7 @@ class BootstrapConfig {
   BootstrapConfig._();
 
   static const publicBaseUrl = '${publicBase}';
+  static const appVersion = '0.0.3';
   static const configUrls = <String>[
 ${configUrls.map((u) => `    '${u}',`).join("\n")}
   ];

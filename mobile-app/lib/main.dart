@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'pages/community/community_page.dart';
+import 'pages/config_gate.dart';
 import 'pages/demand_publish/demand_publish_page.dart';
 import 'pages/home_page.dart';
 import 'pages/login_page.dart';
 import 'pages/mine/mine_page.dart';
 import 'pages/workbench/workbench_page.dart';
-import 'providers/app_providers.dart';
 import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 
@@ -14,21 +14,16 @@ void main() {
   runApp(const ProviderScope(child: MyApp()));
 }
 
-class MyApp extends ConsumerWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final cfg = ref.watch(appConfigProvider);
+  Widget build(BuildContext context) {
     return MaterialApp(
       title: '模宇宙',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
-      home: cfg.when(
-        data: (config) => AppGate(apiBaseUrl: config.apiBaseUrl),
-        loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-        error: (_, __) => const Scaffold(body: Center(child: Text('配置加载失败'))),
-      ),
+      home: ConfigGate(childBuilder: (apiBaseUrl) => AppGate(apiBaseUrl: apiBaseUrl)),
     );
   }
 }

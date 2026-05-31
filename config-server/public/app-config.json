@@ -7,8 +7,12 @@
     "maxUploadSizeMB": 200,
     "enableCommunity": true
   },
-  "version": "2026-05-31T14:15:09.973Z",
+  "version": "2026-05-31T15:01:15.291Z",
+  "appVersion": "0.0.3",
   "maintenance": false,
   "publicBaseUrl": "http://124.220.4.69:8081",
-  "lanBaseUrl": "http://192.168.3.21"
+  "lanBaseUrl": "http://192.168.3.21",
+  "apkDownloadUrl": "http://124.220.4.69:8081/download/app-release.apk",
+  "apkPageUrl": "http://124.220.4.69:8081/download/",
+  "apkVersion": "v0.3"
 }

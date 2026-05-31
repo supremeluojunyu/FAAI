@@ -185,17 +185,16 @@ EOF
 
   sudo tee /etc/systemd/system/moyu-admin.service >/dev/null <<EOF
 [Unit]
-Description=Moyu Admin Web Service
+Description=Moyu Admin Web (static build)
 After=network.target
 
 [Service]
-Type=simple
+Type=oneshot
+RemainAfterExit=yes
 User=${USER}
 WorkingDirectory=${ROOT_DIR}/admin-web
 Environment=PATH=${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=${NPM_BIN} run dev -- --host 0.0.0.0 --port 5173
-Restart=always
-RestartSec=5
+ExecStart=${NPM_BIN} run build
 
 [Install]
 WantedBy=multi-user.target
