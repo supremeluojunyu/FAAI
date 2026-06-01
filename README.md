@@ -1,4 +1,4 @@
-# 模宇宙全栈项目骨架
+# 模宇宙(糖艺大模王)全栈项目骨架
 
 ## 目录
 - `backend`：Node.js + Express + TypeScript + Prisma

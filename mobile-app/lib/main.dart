@@ -20,7 +20,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '模宇宙',
+      title: '模宇宙(糖艺大模王)',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       home: ConfigGate(childBuilder: (apiBaseUrl) => AppGate(apiBaseUrl: apiBaseUrl)),
@@ -37,7 +37,7 @@ class AppGate extends StatefulWidget {
 }
 
 class _AppGateState extends State<AppGate> {
-  String? _token;
+  bool _canEnter = false;
   bool _loading = true;
 
   @override
@@ -48,22 +48,22 @@ class _AppGateState extends State<AppGate> {
 
   Future<void> _init() async {
     final auth = AuthService(widget.apiBaseUrl);
-    _token = await auth.getLocalToken();
+    _canEnter = await auth.canEnter();
     if (mounted) setState(() => _loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (_token == null || _token!.isEmpty) {
+    if (!_canEnter) {
       return LoginPage(
         authService: AuthService(widget.apiBaseUrl),
-        onLoginSuccess: () => setState(() => _token = 'ok'),
+        onLoginSuccess: () => setState(() => _canEnter = true),
       );
     }
     return MainShell(
       apiBaseUrl: widget.apiBaseUrl,
-      onLogout: () => setState(() => _token = null),
+      onLogout: () => setState(() => _canEnter = false),
     );
   }
 }

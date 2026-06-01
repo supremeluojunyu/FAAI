@@ -1,11 +1,11 @@
 {
-    "name": "moyu_app",
-    "short_name": "moyu_app",
+    "name": "模宇宙(糖艺大模王)",
+    "short_name": "模宇宙(糖艺大模王)",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "模宇宙(糖艺大模王) App",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

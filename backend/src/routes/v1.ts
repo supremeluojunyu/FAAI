@@ -103,6 +103,20 @@ v1Router.post("/auth/login", async (req, res) => {
   return ok(res, { token, user });
 });
 
+v1Router.post("/auth/guest", async (req, res) => {
+  const parsed = z.object({ phone: z.string().min(11) }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 1001, "参数错误");
+  const user = await prisma.user.upsert({
+    where: { phone: parsed.data.phone },
+    update: {},
+    create: { phone: parsed.data.phone, role: "BUYER", status: "ACTIVE", nickname: "游客" }
+  });
+  const token = jwt.sign({ userId: user.id, role: user.role, guest: true }, env.jwtSecret, {
+    expiresIn: env.jwtExpiresIn
+  } as jwt.SignOptions);
+  return ok(res, { token, user, guest: true });
+});
+
 v1Router.post("/auth/wechat/login", async (req, res) => {
   const parsed = z.object({ code: z.string().min(1) }).safeParse(req.body);
   if (!parsed.success) return fail(res, 1001, "参数错误");

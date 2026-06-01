@@ -22,7 +22,8 @@ export default function App() {
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
-      <Header>
+      <Header style={{ display: "flex", alignItems: "center", gap: 24 }}>
+        <div style={{ color: "#fff", fontWeight: 600, whiteSpace: "nowrap" }}>模宇宙(糖艺大模王)</div>
         <Menu
           theme="dark"
           mode="horizontal"

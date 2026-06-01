@@ -52,7 +52,7 @@ function renderIndex(meta, publicBase) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>模宇宙 App 下载</title>
+  <title>模宇宙(糖艺大模王) App 下载</title>
   <style>
     body { font-family: system-ui, sans-serif; max-width: 560px; margin: 48px auto; padding: 0 16px; color: #1f1f1f; }
     h1 { font-size: 1.6rem; margin-bottom: 8px; }
@@ -64,7 +64,7 @@ function renderIndex(meta, publicBase) {
 </head>
 <body>
   <div class="card">
-    <h1>模宇宙 Android App</h1>
+    <h1>模宇宙(糖艺大模王) Android App</h1>
     <p>点击下方按钮下载最新 APK，安装后即可连接当前服务器。</p>
     <a class="btn" href="/download/app-release.apk">下载 APK（${meta.tag_name}）</a>
     <div class="meta">
