@@ -95,20 +95,29 @@ async function fetchLatestRelease() {
   return candidates[0];
 }
 
-async function downloadFile(url, dest, headers = {}) {
-  const mirrored = mirrorDownloadUrl(url);
+function assetApiUrl(assetId) {
+  return mirrorApiUrl(`/repos/${REPO}/releases/assets/${assetId}`);
+}
+
+async function downloadFile(url, dest, headers = {}, assetId) {
+  const candidates = [];
+  if (assetId) candidates.push(assetApiUrl(assetId));
+  if (url) candidates.push(mirrorDownloadUrl(url), url);
+
   let lastErr;
-  for (const u of [mirrored, url]) {
+  for (const u of candidates) {
     try {
       const resp = await fetch(u, { headers, redirect: "follow", signal: AbortSignal.timeout(600000) });
       if (!resp.ok) throw new Error(`下载失败 ${resp.status}`);
-      await pipeline(Readable.fromWeb(resp.body), createWriteStream(dest));
+      const buf = Buffer.from(await resp.arrayBuffer());
+      fs.writeFileSync(dest, buf);
       return;
     } catch (e) {
       lastErr = e;
     }
   }
-  throw lastErr || new Error(`下载失败: ${url}`);
+  const detail = lastErr?.cause?.code || lastErr?.message || "unknown";
+  throw new Error(`APK 下载失败 (${detail})`);
 }
 
 function renderIndex(meta) {
@@ -177,7 +186,7 @@ async function main() {
   if (needDownload) {
     console.log(`下载 ${release.tag_name} ...`);
     const tmp = `${APK_PATH}.tmp`;
-    await downloadFile(asset.browser_download_url, tmp, dlHeaders);
+    await downloadFile(asset.browser_download_url, tmp, dlHeaders, asset.id);
     fs.renameSync(tmp, APK_PATH);
     console.log(`已保存: ${APK_PATH}`);
   }
