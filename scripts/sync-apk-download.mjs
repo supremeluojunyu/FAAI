@@ -5,13 +5,36 @@ import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import QRCode from "qrcode";
+import { loadProjectEnv } from "./load-env-file.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
+loadProjectEnv(ROOT);
+
 const REPO = process.env.GITHUB_REPO || "supremeluojunyu/FAAI";
 const DOWNLOAD_DIR = path.join(ROOT, "config-server/public/download");
 const APK_PATH = path.join(DOWNLOAD_DIR, "app-release.apk");
 const VERSION_PATH = path.join(DOWNLOAD_DIR, "version.json");
+
+const API_MIRROR_PREFIX =
+  process.env.GITHUB_API_MIRROR || "https://gh-proxy.com/https://api.github.com";
+const DOWNLOAD_MIRROR_PREFIX =
+  process.env.GITHUB_DOWNLOAD_MIRROR || "https://gh-proxy.com/https://github.com";
+
+function mirrorApiUrl(pathname) {
+  const p = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  const prefix = API_MIRROR_PREFIX.replace(/\/$/, "");
+  if (prefix === "https://api.github.com" || prefix === "direct") {
+    return `https://api.github.com${p}`;
+  }
+  return `${prefix}${p}`;
+}
+
+function mirrorDownloadUrl(url) {
+  if (!url || !url.startsWith("https://github.com/")) return url;
+  if (process.env.GITHUB_DOWNLOAD_MIRROR === "direct") return url;
+  return `${DOWNLOAD_MIRROR_PREFIX.replace(/\/$/, "")}/${url.replace(/^https:\/\//, "")}`;
+}
 
 function readPublicBaseUrl() {
   const cfgPath = path.join(ROOT, "config/public-endpoint.json");
@@ -25,25 +48,67 @@ function readPublicBaseUrl() {
   return "";
 }
 
-async function fetchLatestRelease() {
-  const headers = { Accept: "application/vnd.github+json", "User-Agent": "moyu-apk-sync" };
+function authHeaders(extra = {}) {
+  const headers = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "moyu-apk-sync",
+    ...extra
+  };
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
 
-  const resp = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=20`, { headers });
-  if (!resp.ok) throw new Error(`GitHub API ${resp.status}: ${await resp.text()}`);
-  const releases = await resp.json();
-  const release = releases.find(
+async function fetchJson(url, headers) {
+  let lastErr;
+  const urls = [url];
+  if (url.includes("api.github.com") && !url.includes("gh-proxy")) {
+    urls.push(mirrorApiUrl(url.replace(/^https:\/\/api\.github\.com/, "")));
+  }
+  for (const u of urls) {
+    try {
+      const resp = await fetch(u, { headers, signal: AbortSignal.timeout(60000) });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
+      }
+      return resp.json();
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  const detail = lastErr?.cause?.code || lastErr?.message || "unknown";
+  throw new Error(`GitHub 请求失败 (${detail})，URL: ${url}`);
+}
+
+async function fetchLatestRelease() {
+  const apiUrl = mirrorApiUrl(`/repos/${REPO}/releases?per_page=20`);
+  const releases = await fetchJson(apiUrl, authHeaders());
+  if (!Array.isArray(releases)) {
+    throw new Error(typeof releases?.message === "string" ? releases.message : "GitHub API 返回异常");
+  }
+  const candidates = releases.filter(
     (r) => !r.draft && r.assets?.some((a) => a.name === "app-release.apk")
   );
-  if (!release) throw new Error("未找到含 app-release.apk 的 Release");
-  return release;
+  if (!candidates.length) throw new Error("未找到含 app-release.apk 的 Release");
+  candidates.sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
+  return candidates[0];
 }
 
 async function downloadFile(url, dest, headers = {}) {
-  const resp = await fetch(url, { headers, redirect: "follow" });
-  if (!resp.ok) throw new Error(`下载失败 ${resp.status}: ${url}`);
-  await pipeline(Readable.fromWeb(resp.body), createWriteStream(dest));
+  const mirrored = mirrorDownloadUrl(url);
+  let lastErr;
+  for (const u of [mirrored, url]) {
+    try {
+      const resp = await fetch(u, { headers, redirect: "follow", signal: AbortSignal.timeout(600000) });
+      if (!resp.ok) throw new Error(`下载失败 ${resp.status}`);
+      await pipeline(Readable.fromWeb(resp.body), createWriteStream(dest));
+      return;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error(`下载失败: ${url}`);
 }
 
 function renderIndex(meta) {
@@ -92,6 +157,7 @@ async function writeQrImage(url, dest) {
 
 async function main() {
   fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
+  console.log("GitHub API:", API_MIRROR_PREFIX.includes("gh-proxy") ? "镜像模式" : "直连");
 
   const release = await fetchLatestRelease();
   const asset = release.assets?.find((a) => a.name === "app-release.apk");
@@ -106,14 +172,12 @@ async function main() {
     }
   }
 
-  const headers = { Accept: "application/octet-stream", "User-Agent": "moyu-apk-sync" };
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-  if (token) headers.Authorization = `Bearer ${token}`;
+  const dlHeaders = authHeaders({ Accept: "application/octet-stream" });
 
   if (needDownload) {
     console.log(`下载 ${release.tag_name} ...`);
     const tmp = `${APK_PATH}.tmp`;
-    await downloadFile(asset.browser_download_url, tmp, headers);
+    await downloadFile(asset.browser_download_url, tmp, dlHeaders);
     fs.renameSync(tmp, APK_PATH);
     console.log(`已保存: ${APK_PATH}`);
   }
@@ -152,5 +216,7 @@ async function main() {
 
 main().catch((err) => {
   console.error(err.message || err);
+  console.error("\n提示: 若直连 GitHub 失败，请在 config/apk-sync.env 配置 GITHUB_TOKEN，默认已走 gh-proxy 镜像。");
+  console.error("推送代码请用 SSH: bash scripts/git-push-github.sh");
   process.exit(1);
 });
