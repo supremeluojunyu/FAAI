@@ -68,6 +68,20 @@ class AuthService {
     await saveToken(token);
   }
 
+  Future<void> loginByCarrier({required String phone, String? operator}) async {
+    final resp = await _dio().post('/auth/carrier-login', data: {
+      'phone': phone,
+      if (operator != null) 'operator': operator,
+    });
+    final data = (resp.data as Map<String, dynamic>)['data'] as Map<String, dynamic>? ?? {};
+    final token = (data['token'] ?? '').toString();
+    if (token.isEmpty) throw Exception('一键登录失败：token为空');
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_isGuestKey, false);
+    await prefs.setString(_guestPhoneKey, phone);
+    await saveToken(token);
+  }
+
   Future<void> loginAsGuest(String phone) async {
     final resp = await _dio().post('/auth/guest', data: {'phone': phone});
     final data = (resp.data as Map<String, dynamic>)['data'] as Map<String, dynamic>? ?? {};

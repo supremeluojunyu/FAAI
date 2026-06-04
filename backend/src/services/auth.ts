@@ -9,6 +9,7 @@ type SmsCodeRecord = {
 const smsCodeStore = new Map<string, SmsCodeRecord>();
 
 function genCode() {
+  if (env.smsProvider === "mock") return "123456";
   if (env.nodeEnv !== "production") return "123456";
   return String(crypto.randomInt(100000, 1000000));
 }
@@ -23,7 +24,7 @@ export async function sendSmsCode(phone: string) {
   if (env.smsProvider === "mock") {
     return {
       expireSec: env.smsCodeTtlSec,
-      debugCode: env.nodeEnv === "production" ? undefined : code
+      debugCode: code
     };
   }
 

@@ -39,6 +39,25 @@ const apiBaseUrl = `${publicBase}/api/v1`;
 const wsUrl = publicBase.replace(/^http/, "ws") + "/ws";
 const now = new Date().toISOString();
 
+const appConfigPath = path.join(ROOT, "config-server/public/app-config.json");
+const existingConfig = fs.existsSync(appConfigPath)
+  ? JSON.parse(fs.readFileSync(appConfigPath, "utf8"))
+  : {};
+const existingSplashAds = existingConfig.splashAds ?? {
+  enabled: true,
+  skipAfterSec: 2,
+  durationSec: 5,
+  items: [
+    {
+      id: "demo-1",
+      title: "模宇宙(糖艺大模王)",
+      imageUrl: "https://picsum.photos/seed/moyu-ad1/1080/1920",
+      linkUrl: "https://example.com/ad1",
+      network: "custom",
+    },
+  ],
+};
+
 const appConfig = {
   apiBaseUrl,
   wsUrl,
@@ -48,6 +67,7 @@ const appConfig = {
     maxUploadSizeMB: 200,
     enableCommunity: true,
   },
+  splashAds: existingSplashAds,
   version: now,
   appVersion: "0.0.3",
   maintenance: false,

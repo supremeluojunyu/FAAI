@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/carrier_phone_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
@@ -16,75 +17,84 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _phone = TextEditingController();
-  final _code = TextEditingController();
-  final _wechatCode = TextEditingController();
+  final _carrier = CarrierPhoneService();
   bool _loading = false;
+  bool _fetchingPhone = true;
+  String? _phone;
+  String? _operator;
   String _tip = '';
 
-  bool _isValidPhone(String phone) => RegExp(r'^1\d{10}$').hasMatch(phone);
+  @override
+  void initState() {
+    super.initState();
+    _loadCarrierPhone();
+  }
 
-  Future<void> _browseAsGuest() async {
-    final phone = _phone.text.trim();
-    if (!_isValidPhone(phone)) {
-      setState(() => _tip = '请输入11位有效手机号');
+  Future<void> _loadCarrierPhone() async {
+    setState(() {
+      _fetchingPhone = true;
+      _tip = '正在通过运营商获取本机号码…';
+    });
+    final result = await _carrier.fetchCarrierPhone();
+    if (!mounted) return;
+    if (result.ok) {
+      setState(() {
+        _phone = result.phone;
+        _operator = result.operator;
+        _fetchingPhone = false;
+        _tip = '已识别${_operator ?? '运营商'}号码，无需手动输入';
+      });
       return;
     }
+    setState(() {
+      _fetchingPhone = false;
+      _tip = '未能自动获取号码，请授予电话权限后重试（部分机型需插 SIM 卡）';
+    });
+  }
+
+  Future<void> _ensurePhone() async {
+    if (_phone != null && _phone!.length == 11) return;
+    await _loadCarrierPhone();
+    if (_phone == null || _phone!.length != 11) {
+      throw Exception('无法获取本机号码，请检查 SIM 卡与电话权限');
+    }
+  }
+
+  Future<void> _oneTapLogin() async {
     setState(() {
       _loading = true;
       _tip = '';
     });
     try {
-      await widget.authService.loginAsGuest(phone);
-    } catch (_) {
-      await widget.authService.saveGuestPhone(phone);
-    }
-    if (!mounted) return;
-    widget.onLoginSuccess();
-  }
-
-  Future<void> _sendCode() async {
-    final phone = _phone.text.trim();
-    if (!_isValidPhone(phone)) {
-      setState(() => _tip = '请先输入有效手机号');
-      return;
-    }
-    setState(() => _loading = true);
-    try {
-      final debugCode = await widget.authService.sendCode(phone);
+      await _ensurePhone();
+      await widget.authService.loginByCarrier(phone: _phone!, operator: _operator);
       if (!mounted) return;
-      setState(() => _tip = debugCode.isEmpty ? '验证码已发送' : '开发验证码：$debugCode');
+      widget.onLoginSuccess();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _tip = '发送失败：$e');
+      setState(() => _tip = '一键登录失败：$e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _loginBySms() async {
-    setState(() => _loading = true);
+  Future<void> _browseAsGuest() async {
+    setState(() {
+      _loading = true;
+      _tip = '';
+    });
     try {
-      await widget.authService.loginBySms(phone: _phone.text.trim(), code: _code.text.trim());
+      await _ensurePhone();
+      try {
+        await widget.authService.loginAsGuest(_phone!);
+      } catch (_) {
+        await widget.authService.saveGuestPhone(_phone!);
+      }
       if (!mounted) return;
       widget.onLoginSuccess();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _tip = '登录失败：$e');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _loginByWechatCode() async {
-    setState(() => _loading = true);
-    try {
-      await widget.authService.loginByWechatCode(_wechatCode.text.trim());
-      if (!mounted) return;
-      widget.onLoginSuccess();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _tip = '微信登录失败：$e');
+      setState(() => _tip = '游客进入失败：$e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -92,75 +102,82 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final masked = _phone != null ? CarrierPhoneService.maskPhone(_phone!) : '获取中…';
+
     return Scaffold(
-      appBar: AppBar(title: const Text('欢迎使用')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Text(
-            '模宇宙(糖艺大模王)',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          const Text('填写手机号即可游客浏览，无需验证码', style: TextStyle(color: Colors.grey)),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _phone,
-            keyboardType: TextInputType.phone,
-            maxLength: 11,
-            decoration: const InputDecoration(
-              labelText: '手机号',
-              hintText: '请输入11位手机号',
-              counterText: '',
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            const SizedBox(height: 24),
+            const Text(
+              '模宇宙(糖艺大模王)',
+              style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
             ),
-          ),
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: _loading ? null : _browseAsGuest,
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-            child: const Text('游客浏览'),
-          ),
-          const Divider(height: 40),
-          const Text('完整登录（可选）', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _code,
-                  decoration: const InputDecoration(labelText: '验证码'),
+            const SizedBox(height: 8),
+            const Text('运营商认证 · 本机号码一键登录', style: TextStyle(color: Colors.grey, fontSize: 15)),
+            const SizedBox(height: 40),
+            Card(
+              elevation: 0,
+              color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.35),
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                  Row(
+                    children: [
+                      Icon(Icons.sim_card_outlined, color: Theme.of(context).colorScheme.primary, size: 32),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(_operator ?? '运营商', style: const TextStyle(fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 4),
+                            Text(
+                              masked,
+                              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_fetchingPhone) const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _tip.isEmpty ? '号码由运营商/ SIM 提供，无需手动输入' : _tip,
+                    style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                  ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 8),
-              FilledButton.tonal(
-                onPressed: _loading ? null : _sendCode,
-                child: const Text('发码'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: _loading ? null : _loginBySms,
-            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
-            child: const Text('验证码登录'),
-          ),
-          const Divider(height: 32),
-          const Text('微信登录（联调模式）', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _wechatCode,
-            decoration: const InputDecoration(labelText: '微信授权 code'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: _loading ? null : _loginByWechatCode,
-            child: const Text('微信 code 登录'),
-          ),
-          if (_tip.isNotEmpty) ...[
+            ),
+            const SizedBox(height: 28),
+            FilledButton(
+              onPressed: _loading || _fetchingPhone ? null : _oneTapLogin,
+              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+              child: const Text('本机号码一键登录'),
+            ),
             const SizedBox(height: 12),
-            Text(_tip, style: const TextStyle(color: Colors.deepOrange)),
+            OutlinedButton(
+              onPressed: _loading || _fetchingPhone ? null : _browseAsGuest,
+              style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+              child: const Text('游客浏览（同样使用本机号码）'),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: _loading ? null : _loadCarrierPhone,
+              child: const Text('重新获取本机号码'),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              '登录即表示同意《用户协议》和《隐私政策》。我们仅用于账号识别，不会对外泄露您的手机号。',
+              style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.5),
+            ),
           ],
-        ],
+        ),
       ),
     );
   }

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
+import QRCode from "qrcode";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -45,8 +46,8 @@ async function downloadFile(url, dest, headers = {}) {
   await pipeline(Readable.fromWeb(resp.body), createWriteStream(dest));
 }
 
-function renderIndex(meta, publicBase) {
-  const apkUrl = `${publicBase}/download/app-release.apk`;
+function renderIndex(meta) {
+  const apkUrl = meta.download_url;
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -54,28 +55,39 @@ function renderIndex(meta, publicBase) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>模宇宙(糖艺大模王) App 下载</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 560px; margin: 48px auto; padding: 0 16px; color: #1f1f1f; }
-    h1 { font-size: 1.6rem; margin-bottom: 8px; }
-    .card { border: 1px solid #e8e8e8; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
-    .btn { display: inline-block; margin-top: 16px; padding: 12px 24px; background: #1677ff; color: #fff; text-decoration: none; border-radius: 8px; font-weight: 600; }
-    .meta { color: #666; font-size: 14px; line-height: 1.8; margin-top: 12px; }
-    code { background: #f5f5f5; padding: 2px 6px; border-radius: 4px; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 520px; margin: 32px auto; padding: 0 16px 48px; color: #1f1f1f; background: #f7f8fa; }
+    h1 { font-size: 1.5rem; margin: 0 0 8px; }
+    .card { background: #fff; border: 1px solid #e8e8e8; border-radius: 16px; padding: 28px 24px; box-shadow: 0 4px 16px rgba(0,0,0,.05); text-align: center; }
+    .sub { color: #666; font-size: 15px; margin-bottom: 20px; line-height: 1.6; }
+    .qr-wrap { display: inline-block; padding: 12px; background: #fff; border: 1px solid #eee; border-radius: 12px; margin: 8px 0 16px; }
+    .qr-wrap img { display: block; width: 240px; height: 240px; }
+    .qr-tip { color: #888; font-size: 13px; margin-bottom: 16px; }
+    .btn { display: inline-block; padding: 14px 28px; background: #1677ff; color: #fff; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px; }
+    .meta { text-align: left; color: #666; font-size: 14px; line-height: 1.9; margin-top: 24px; padding-top: 20px; border-top: 1px solid #f0f0f0; }
+    code { background: #f5f5f5; padding: 2px 6px; border-radius: 4px; word-break: break-all; font-size: 13px; }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>模宇宙(糖艺大模王) Android App</h1>
-    <p>点击下方按钮下载最新 APK，安装后即可连接当前服务器。</p>
-    <a class="btn" href="/download/app-release.apk">下载 APK（${meta.tag_name}）</a>
+    <p class="sub">扫码或点击下方按钮，下载最新 APK 安装包</p>
+    <div class="qr-wrap"><img src="qr.png?v=${Date.now()}" alt="扫码下载 APK" width="240" height="240" /></div>
+    <p class="qr-tip">手机扫码直接下载</p>
+    <a class="btn" href="${apkUrl}">下载 APK（${meta.tag_name}）</a>
     <div class="meta">
       <div>版本：<code>${meta.tag_name}</code></div>
       <div>大小：${meta.size_mb} MB</div>
       <div>更新时间：${meta.updated_at_local}</div>
-      <div>直链：<code>${apkUrl}</code></div>
+      <div>下载地址：<code>${apkUrl}</code></div>
     </div>
   </div>
 </body>
 </html>`;
+}
+
+async function writeQrImage(url, dest) {
+  await QRCode.toFile(dest, url, { width: 240, margin: 2, errorCorrectionLevel: "M" });
 }
 
 async function main() {
@@ -121,7 +133,9 @@ async function main() {
   };
 
   fs.writeFileSync(VERSION_PATH, JSON.stringify(meta, null, 2) + "\n");
-  fs.writeFileSync(path.join(DOWNLOAD_DIR, "index.html"), renderIndex(meta, publicBase || ""));
+  const qrPath = path.join(DOWNLOAD_DIR, "qr.png");
+  await writeQrImage(meta.download_url, qrPath);
+  fs.writeFileSync(path.join(DOWNLOAD_DIR, "index.html"), renderIndex(meta));
 
   const appCfgPath = path.join(ROOT, "config-server/public/app-config.json");
   if (fs.existsSync(appCfgPath)) {

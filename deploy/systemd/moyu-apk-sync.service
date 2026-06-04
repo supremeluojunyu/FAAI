@@ -9,4 +9,5 @@ User=golden
 WorkingDirectory=/home/golden/FAAI
 Environment=PATH=/home/golden/.local/bin:/usr/bin:/bin
 EnvironmentFile=-/home/golden/FAAI/config/apk-sync.env
+ExecStartPre=/usr/bin/npm ci --prefix /home/golden/FAAI/scripts --omit=dev
 ExecStart=/home/golden/.local/bin/node /home/golden/FAAI/scripts/sync-apk-download.mjs

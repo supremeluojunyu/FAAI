@@ -24,6 +24,7 @@ class ConfigService {
         wsUrl: savedWs ?? '${savedApi.replaceFirst('/api/v1', '').replaceFirst('http', 'ws')}/ws',
         maintenance: false,
         features: const {},
+        splashAds: const SplashAdsConfig(),
       );
     }
 

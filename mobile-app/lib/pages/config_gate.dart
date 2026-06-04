@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/bootstrap_config.dart';
+import '../models/app_config.dart';
 import '../providers/app_providers.dart';
 import '../services/config_storage.dart';
 
@@ -107,13 +108,13 @@ class _ManualConfigPageState extends State<ManualConfigPage> {
 class ConfigGate extends ConsumerWidget {
   const ConfigGate({super.key, required this.childBuilder});
 
-  final Widget Function(String apiBaseUrl) childBuilder;
+  final Widget Function(AppConfig config) childBuilder;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cfg = ref.watch(appConfigProvider);
     return cfg.when(
-      data: (config) => childBuilder(config.apiBaseUrl),
+      data: (config) => childBuilder(config),
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (_, __) => ManualConfigPage(
         initialBaseUrl: BootstrapConfig.publicBaseUrl,

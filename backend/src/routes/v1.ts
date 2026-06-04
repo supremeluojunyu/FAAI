@@ -4,6 +4,7 @@ import { z } from "zod";
 import { env } from "../config/env";
 import { authRequired, adminRequired } from "../middlewares/auth";
 import { prisma } from "../models/prisma";
+import { publishAppConfig } from "../services/app-config-publish";
 import { sendSmsCode, verifySmsCode } from "../services/auth";
 import { getWechatOpenIdByCode } from "../services/wechat";
 import { fail, ok } from "../utils/response";
@@ -103,6 +104,29 @@ v1Router.post("/auth/login", async (req, res) => {
   return ok(res, { token, user });
 });
 
+v1Router.post("/auth/carrier-login", async (req, res) => {
+  const parsed = z
+    .object({ phone: z.string().min(11), operator: z.string().optional(), carrierToken: z.string().optional() })
+    .safeParse(req.body);
+  if (!parsed.success) return fail(res, 1001, "参数错误");
+  const phone = parsed.data.phone.replace(/\D/g, "").slice(-11);
+  if (!/^1\d{10}$/.test(phone)) return fail(res, 1001, "手机号无效");
+  const user = await prisma.user.upsert({
+    where: { phone },
+    update: { nickname: parsed.data.operator ? `${parsed.data.operator}用户` : undefined },
+    create: {
+      phone,
+      role: "BUYER",
+      status: "ACTIVE",
+      nickname: parsed.data.operator ? `${parsed.data.operator}用户` : "用户"
+    }
+  });
+  const token = jwt.sign({ userId: user.id, role: user.role }, env.jwtSecret, {
+    expiresIn: env.jwtExpiresIn
+  } as jwt.SignOptions);
+  return ok(res, { token, user, carrier: { operator: parsed.data.operator ?? null } });
+});
+
 v1Router.post("/auth/guest", async (req, res) => {
   const parsed = z.object({ phone: z.string().min(11) }).safeParse(req.body);
   if (!parsed.success) return fail(res, 1001, "参数错误");
@@ -155,6 +179,15 @@ v1Router.post("/auth/wechat/login", async (req, res) => {
   }
 });
 
+v1Router.get("/user/favorites", authRequired, async (req, res) => {
+  const rows = await prisma.modelFavorite.findMany({
+    where: { userId: req.auth!.userId },
+    include: { model: true },
+    orderBy: { createdAt: "desc" }
+  });
+  return ok(res, { list: rows.map((r) => r.model) });
+});
+
 v1Router.get("/user/profile", authRequired, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
   return ok(res, { user });
@@ -186,6 +219,7 @@ v1Router.get("/models", async (req, res) => {
   const page = Number(req.query.page || 1);
   const size = Number(req.query.size || 20);
   const list = await prisma.model.findMany({
+    where: { status: "ON_SALE" },
     skip: (page - 1) * size,
     take: size,
     orderBy: { createdAt: "desc" }
@@ -681,11 +715,11 @@ v1Router.put("/admin/configs/:key", authRequired, adminRequired, async (req, res
 });
 
 v1Router.post("/admin/configs/publish", authRequired, adminRequired, async (_req, res) => {
-  // 实际项目中请写入 S3/CDN，并记录审计日志。
-  const configs = await prisma.systemConfig.findMany();
+  const result = await publishAppConfig();
   return ok(res, {
     task_id: `publish_${Date.now()}`,
-    config_preview: configs
+    file_path: result.filePath,
+    config_preview: result.config
   });
 });
 

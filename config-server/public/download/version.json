@@ -1,11 +1,11 @@
 {
-  "tag_name": "v0.3",
-  "asset_id": 434493232,
-  "size_bytes": 52472034,
-  "size_mb": "50.0",
-  "published_at": "2026-05-31T14:21:13Z",
-  "updated_at": "2026-06-01T01:42:59.304Z",
-  "updated_at_local": "2026/6/1 01:42:59",
+  "tag_name": "v0.0.4",
+  "asset_id": 434836866,
+  "size_bytes": 52570494,
+  "size_mb": "50.1",
+  "published_at": "2026-06-01T01:56:14Z",
+  "updated_at": "2026-06-01T02:13:11.804Z",
+  "updated_at_local": "2026/6/1 02:13:11",
   "download_url": "http://124.220.4.69:8081/download/app-release.apk",
   "page_url": "http://124.220.4.69:8081/download/"
 }

@@ -7,12 +7,26 @@
     "maxUploadSizeMB": 200,
     "enableCommunity": true
   },
-  "version": "2026-05-31T15:01:15.291Z",
+  "version": "2026-06-04T06:37:42.814Z",
   "appVersion": "0.0.3",
   "maintenance": false,
   "publicBaseUrl": "http://124.220.4.69:8081",
   "lanBaseUrl": "http://192.168.3.21",
   "apkDownloadUrl": "http://124.220.4.69:8081/download/app-release.apk",
   "apkPageUrl": "http://124.220.4.69:8081/download/",
-  "apkVersion": "v0.3"
+  "apkVersion": "v0.0.4",
+  "splashAds": {
+    "items": [
+      {
+        "id": "demo-1",
+        "title": "模宇宙(糖艺大模王)",
+        "linkUrl": "https://example.com/ad1",
+        "network": "custom",
+        "imageUrl": "https://picsum.photos/seed/moyu-ad1/1080/1920"
+      }
+    ],
+    "enabled": true,
+    "durationSec": 5,
+    "skipAfterSec": 2
+  }
 }

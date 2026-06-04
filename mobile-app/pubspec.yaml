@@ -1,7 +1,7 @@
 name: moyu_app
 description: 模宇宙(糖艺大模王) App
 publish_to: "none"
-version: 0.0.4+5
+version: 0.0.5+6
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -12,6 +12,8 @@ dependencies:
   flutter_riverpod: ^2.6.1
   dio: ^5.7.0
   shared_preferences: ^2.3.2
+  url_launcher: ^6.3.1
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:
