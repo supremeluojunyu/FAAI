@@ -16,7 +16,9 @@ class CarrierPhoneResult {
     this.simReady = false,
   });
 
-  bool get hasRealPhone => phone != null && phone!.length == 11;
+  static final _mobileRe = RegExp(r'^1[3-9]\d{9}$');
+
+  bool get hasRealPhone => phone != null && _mobileRe.hasMatch(phone!);
 
   /// SIM 未返回号码时，仍可用设备标识 + 运营商信息完成认证
   bool get canAuth => hasRealPhone || (deviceId != null && deviceId!.isNotEmpty);
@@ -54,8 +56,11 @@ class CarrierPhoneService {
     }
   }
 
+  static bool isRealMobile(String? phone) =>
+      phone != null && _mobileRe.hasMatch(phone);
+
   static String maskPhone(String phone) {
-    if (phone.length != 11) return phone;
+    if (!isRealMobile(phone)) return '本机认证账号';
     return '${phone.substring(0, 3)}****${phone.substring(7)}';
   }
 }

@@ -167,6 +167,14 @@ async function writeQrImage(url, dest) {
   await QRCode.toFile(dest, url, { width: 240, margin: 2, errorCorrectionLevel: "M" });
 }
 
+/** 供 Nginx include：下载时显示与 Release 一致的文件名（仅 ASCII，避免引号破坏 nginx 配置） */
+function writeApkHeadersConf(tag) {
+  const safeTag = String(tag).replace(/[^a-zA-Z0-9._-]/g, "");
+  const fileName = `moyu-${safeTag}.apk`;
+  const conf = `add_header Content-Disposition 'attachment; filename="${fileName}"';\n`;
+  fs.writeFileSync(path.join(DOWNLOAD_DIR, "apk-headers.conf"), conf);
+}
+
 async function main() {
   fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
   console.log("GitHub API:", API_MIRROR_PREFIX.includes("gh-proxy") ? "镜像模式" : "直连");
@@ -203,12 +211,16 @@ async function main() {
     size_mb: (stat.size / 1024 / 1024).toFixed(1),
     published_at: release.published_at,
     updated_at: new Date().toISOString(),
-    updated_at_local: new Date().toLocaleString("zh-CN", { hour12: false }),
+    updated_at_local: new Date().toLocaleString("zh-CN", {
+      hour12: false,
+      timeZone: "Asia/Shanghai",
+    }),
     download_url: publicBase ? `${publicBase}/download/app-release.apk` : "/download/app-release.apk",
     page_url: publicBase ? `${publicBase}/download/` : "/download/",
   };
 
   fs.writeFileSync(VERSION_PATH, JSON.stringify(meta, null, 2) + "\n");
+  writeApkHeadersConf(meta.tag_name);
   const qrPath = path.join(DOWNLOAD_DIR, "qr.png");
   await writeQrImage(meta.download_url, qrPath);
   fs.writeFileSync(path.join(DOWNLOAD_DIR, "index.html"), renderIndex(meta));
@@ -224,6 +236,14 @@ async function main() {
 
   console.log("下载页:", meta.page_url);
   console.log("APK直链:", meta.download_url);
+  console.log("下载文件名:", `模宇宙(糖艺大模王)-${meta.tag_name}.apk`);
+  try {
+    const { execSync } = await import("node:child_process");
+    execSync("bash scripts/apply-nginx-config.sh", { cwd: ROOT, stdio: "pipe" });
+    console.log("Nginx 已重载（APK 下载文件名已更新）");
+  } catch {
+    console.log("提示: 请执行 bash scripts/apply-nginx-config.sh 使下载文件名生效");
+  }
 }
 
 main().catch((err) => {

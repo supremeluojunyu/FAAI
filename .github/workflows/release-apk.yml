@@ -93,6 +93,27 @@ jobs:
         working-directory: mobile-app
         run: flutter pub get
 
+      # 正式签名：避免 release 使用 debug 密钥导致各次 CI/本地安装包签名不一致
+      - name: Configure Android release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ANDROID_KEYSTORE_BASE64:-}" ]]; then
+            echo "::error::未配置 ANDROID_KEYSTORE_BASE64。请运行 scripts/gen-android-keystore.sh 生成密钥并添加到 GitHub Secrets。"
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > mobile-app/android/app/moyu-release.jks
+          cat > mobile-app/android/key.properties <<EOF
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyPassword=${ANDROID_KEY_PASSWORD}
+          keyAlias=${ANDROID_KEY_ALIAS:-moyu}
+          storeFile=moyu-release.jks
+          EOF
+
       - name: Build release APK
         working-directory: mobile-app
         run: flutter build apk --release --verbose

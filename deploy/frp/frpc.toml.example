@@ -1,0 +1,15 @@
+serverAddr = "YOUR_FRPS_IP"
+serverPort = 7000
+auth.token = "YOUR_FRPS_TOKEN"
+loginFailExit = false
+
+[[proxies]]
+name = "webFAFI"
+type = "tcp"
+localIP = "127.0.0.1"
+# 须与 deploy/nginx/moyu.conf 中 listen 127.0.0.1:9080 一致，并开启下方 Proxy Protocol
+localPort = 9080
+remotePort = 8081
+
+[proxies.transport]
+proxyProtocolVersion = "v2"

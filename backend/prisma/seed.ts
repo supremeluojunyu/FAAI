@@ -181,6 +181,58 @@ async function main() {
         ]
       },
       description: "App 启动广告页配置"
+    },
+    {
+      key: "recharge_packages",
+      value: {
+        enabled: true,
+        notice: "充值金额实时到账，可用于购买模型与增值服务。",
+        packages: [
+          { id: "p6", amount: 6, bonus: 0, label: "6元" },
+          { id: "p30", amount: 30, bonus: 3, label: "30元送3元" },
+          { id: "p68", amount: 68, bonus: 8, label: "68元送8元" },
+          { id: "p128", amount: 128, bonus: 20, label: "128元送20元" }
+        ]
+      },
+      description: "App 充值档位配置"
+    },
+    {
+      key: "wallet_config",
+      value: {
+        rechargeEnabled: true,
+        withdrawEnabled: false,
+        withdrawMin: 10,
+        withdrawTip: "提现需完成实名认证，审核后 1-3 个工作日到账。",
+        balanceTip: "余额可用于购买模型、打赏设计师等。"
+      },
+      description: "App 钱包页文案与开关"
+    },
+    {
+      key: "customer_service",
+      value: {
+        phone: "400-000-0000",
+        wechat: "moyu_support",
+        workHours: "9:00-18:00（工作日）",
+        helpUrl: ""
+      },
+      description: "客服与帮助配置"
+    },
+    {
+      key: "app_version_policy",
+      value: {
+        enabled: true,
+        minVersion: "0.0.7",
+        minBuildNumber: 8,
+        latestVersion: "0.0.8",
+        latestBuildNumber: 9,
+        blockedVersions: ["0.0.5", "0.0.6"],
+        forceUpdate: true,
+        title: "需要更新 App",
+        message: "当前版本过低或已停用，请下载安装最新版本后继续使用。",
+        downloadPageUrl: "",
+        downloadApkUrl: ""
+      },
+      description: "App 最低可用版本与强制更新"
     }
   ];
 

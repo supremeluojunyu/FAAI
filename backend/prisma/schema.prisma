@@ -37,6 +37,7 @@ model User {
   notifications Notification[]
   transactions Transaction[]
   adminLogs    AdminLog[]
+  activityLogs UserActivityLog[]
 }
 
 enum Role {
@@ -310,4 +311,20 @@ model AdminLog {
   detail    Json?
   ip        String?
   createdAt DateTime @default(now())
+}
+
+model UserActivityLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  targetType String?
+  targetId   String?
+  detail     Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
 }

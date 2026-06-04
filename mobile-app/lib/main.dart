@@ -9,6 +9,7 @@ import 'pages/home_page.dart';
 import 'pages/login_page.dart';
 import 'pages/mine/mine_page.dart';
 import 'pages/workbench/workbench_page.dart';
+import 'services/activity_service.dart';
 import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 
@@ -22,6 +23,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: AuthService.navigatorKey,
       title: '模宇宙(糖艺大模王)',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
@@ -95,6 +97,14 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int current = 0;
+  static const _tabNames = ['商城', 'AI接单', '工作台', '社区', '我的'];
+
+  @override
+  void initState() {
+    super.initState();
+    ActivityService(widget.apiBaseUrl).logTab(_tabNames[current]);
+  }
+
   List<Widget> get pages => [
         const HomePage(),
         const DemandPublishPage(),
@@ -109,7 +119,10 @@ class _MainShellState extends State<MainShell> {
       body: pages[current],
       bottomNavigationBar: NavigationBar(
         selectedIndex: current,
-        onDestinationSelected: (v) => setState(() => current = v),
+        onDestinationSelected: (v) {
+          setState(() => current = v);
+          ActivityService(widget.apiBaseUrl).logTab(_tabNames[v]);
+        },
         destinations: const [
           NavigationDestination(icon: Icon(Icons.storefront_outlined), label: '商城'),
           NavigationDestination(icon: Icon(Icons.auto_awesome_outlined), label: 'AI&接单'),

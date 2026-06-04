@@ -3,7 +3,7 @@ class BootstrapConfig {
   BootstrapConfig._();
 
   static const publicBaseUrl = 'http://124.220.4.69:8081';
-  static const appVersion = '0.0.3';
+  static const appVersion = '0.0.8';
   static const configUrls = <String>[
     'http://124.220.4.69:8081/app-config.json',
     'http://192.168.3.21/app-config.json',

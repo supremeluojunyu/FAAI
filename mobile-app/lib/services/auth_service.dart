@@ -1,5 +1,9 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/version_policy.dart';
+import '../pages/force_update_page.dart';
+import 'api_dio.dart';
 
 class AuthService {
   AuthService(this.baseUrl);
@@ -9,7 +13,40 @@ class AuthService {
   static const _guestPhoneKey = 'guest_phone';
   static const _isGuestKey = 'is_guest';
 
-  Dio _dio() => Dio(BaseOptions(baseUrl: baseUrl, connectTimeout: const Duration(seconds: 10)));
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+  Dio _dio() => createApiDio(baseUrl);
+
+  void _throwIfForceUpdate(dynamic data) {
+    final payload = parseForceUpdatePayload(data);
+    if (payload == null) return;
+    final policy = VersionPolicy(
+      enabled: true,
+      forceUpdate: payload['force_update'] != false,
+      title: (payload['title'] ?? '需要更新').toString(),
+      message: (payload['message'] ?? '请更新 App').toString(),
+      downloadPageUrl: (payload['download_page_url'] ?? '').toString(),
+      downloadApkUrl: (payload['download_apk_url'] ?? '').toString(),
+      minVersion: (payload['min_version'] ?? '').toString(),
+      minBuildNumber: (payload['min_build_number'] as num?)?.toInt() ?? 0,
+      latestVersion: (payload['latest_version'] ?? '').toString(),
+    );
+    navigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => ForceUpdatePage(
+          policy: policy,
+          reason: (payload['reason'] ?? policy.message).toString(),
+          downloadUrl: policy.resolveDownloadUrl(),
+        ),
+      ),
+      (_) => false,
+    );
+    throw Exception(policy.message);
+  }
+
+  void _checkResponse(dynamic raw) {
+    if (raw is Map) _throwIfForceUpdate(raw);
+  }
 
   Future<String?> getLocalToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -59,6 +96,7 @@ class AuthService {
 
   Future<void> loginBySms({required String phone, required String code}) async {
     final resp = await _dio().post('/auth/login', data: {'phone': phone, 'code': code});
+    _checkResponse(resp.data);
     final data = (resp.data as Map<String, dynamic>)['data'] as Map<String, dynamic>? ?? {};
     final token = (data['token'] ?? '').toString();
     if (token.isEmpty) throw Exception('登录失败：token为空');
@@ -74,6 +112,7 @@ class AuthService {
       if (operator != null) 'operator': operator,
       if (deviceId != null) 'deviceId': deviceId,
     });
+    _checkResponse(resp.data);
     final data = (resp.data as Map<String, dynamic>)['data'] as Map<String, dynamic>? ?? {};
     final token = (data['token'] ?? '').toString();
     if (token.isEmpty) throw Exception('一键登录失败：token为空');
@@ -90,6 +129,7 @@ class AuthService {
       if (deviceId != null) 'deviceId': deviceId,
       if (operator != null) 'operator': operator,
     });
+    _checkResponse(resp.data);
     final data = (resp.data as Map<String, dynamic>)['data'] as Map<String, dynamic>? ?? {};
     final token = (data['token'] ?? '').toString();
     if (token.isEmpty) throw Exception('游客进入失败：token为空');

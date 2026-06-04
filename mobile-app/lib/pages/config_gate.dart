@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/bootstrap_config.dart';
 import '../models/app_config.dart';
 import '../providers/app_providers.dart';
+import '../services/auth_service.dart';
 import '../services/config_storage.dart';
+import '../utils/app_version_info.dart';
+import 'force_update_page.dart';
 
 class ManualConfigPage extends StatefulWidget {
   const ManualConfigPage({
@@ -105,20 +108,71 @@ class _ManualConfigPageState extends State<ManualConfigPage> {
   }
 }
 
-class ConfigGate extends ConsumerWidget {
+class ConfigGate extends ConsumerStatefulWidget {
   const ConfigGate({super.key, required this.childBuilder});
 
   final Widget Function(AppConfig config) childBuilder;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ConfigGate> createState() => _ConfigGateState();
+}
+
+class _ConfigGateState extends ConsumerState<ConfigGate> {
+  Future<({AppConfig config, bool allowed, String? reason})>? _versionCheck;
+
+  Future<({AppConfig config, bool allowed, String? reason})> _evaluate(AppConfig config) async {
+    final info = await AppVersionInfo.get();
+    final policy = config.versionPolicy;
+    if (!policy.isAllowed(version: info.version, buildNumber: info.buildNumber)) {
+      if (policy.forceUpdate) {
+        await AuthService(config.apiBaseUrl).logout();
+      }
+      String reason = policy.message;
+      for (final b in policy.blockedVersions) {
+        if (info.version == b) {
+          reason = '当前版本 $b 已停用，请更新';
+          break;
+        }
+      }
+      return (config: config, allowed: false, reason: reason);
+    }
+    return (config: config, allowed: true, reason: null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cfg = ref.watch(appConfigProvider);
     return cfg.when(
-      data: (config) => childBuilder(config),
+      data: (config) {
+        _versionCheck ??= _evaluate(config);
+        return FutureBuilder(
+          future: _versionCheck,
+          builder: (context, snap) {
+            if (!snap.hasData) {
+              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+            }
+            final r = snap.data!;
+            if (!r.allowed) {
+              return ForceUpdatePage(
+                policy: r.config.versionPolicy,
+                reason: r.reason,
+                downloadUrl: r.config.versionPolicy.resolveDownloadUrl(
+                  fallbackPage: r.config.apkPageUrl,
+                  fallbackApk: r.config.apkDownloadUrl,
+                ),
+              );
+            }
+            return widget.childBuilder(r.config);
+          },
+        );
+      },
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (_, __) => ManualConfigPage(
         initialBaseUrl: BootstrapConfig.publicBaseUrl,
-        onConfigured: () => ref.invalidate(appConfigProvider),
+        onConfigured: () {
+          _versionCheck = null;
+          ref.invalidate(appConfigProvider);
+        },
       ),
     );
   }

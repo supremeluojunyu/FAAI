@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { invalidateVersionPolicyCache } from "../middlewares/app-version-guard";
 import { prisma } from "../models/prisma";
 
 const DEFAULT_SPLASH_ADS = {
@@ -43,16 +44,40 @@ export async function publishAppConfig() {
       (existing.features as Record<string, unknown> | undefined)?.maxUploadSizeMB ??
       200
   };
+  const rechargePackages =
+    (map.recharge_packages as Record<string, unknown> | undefined) ?? existing.rechargePackages;
+  const walletConfig = (map.wallet_config as Record<string, unknown> | undefined) ?? existing.walletConfig;
+  const customerService =
+    (map.customer_service as Record<string, unknown> | undefined) ?? existing.customerService;
+  const rawPolicy = map.app_version_policy as Record<string, unknown> | undefined;
+  const versionPolicy = rawPolicy
+    ? {
+        ...rawPolicy,
+        downloadPageUrl:
+          (rawPolicy.downloadPageUrl as string) ||
+          (existing.apkPageUrl as string) ||
+          (existing.publicBaseUrl ? `${existing.publicBaseUrl}/download/` : ""),
+        downloadApkUrl:
+          (rawPolicy.downloadApkUrl as string) ||
+          (existing.apkDownloadUrl as string) ||
+          ""
+      }
+    : existing.versionPolicy;
 
   const next = {
     ...existing,
     splashAds,
     maintenance,
     features,
+    ...(rechargePackages ? { rechargePackages } : {}),
+    ...(walletConfig ? { walletConfig } : {}),
+    ...(customerService ? { customerService } : {}),
+    ...(versionPolicy ? { versionPolicy } : {}),
     version: new Date().toISOString()
   };
 
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, JSON.stringify(next, null, 2) + "\n");
+  invalidateVersionPolicyCache();
   return { filePath, config: next };
 }

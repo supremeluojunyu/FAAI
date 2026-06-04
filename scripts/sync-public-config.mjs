@@ -69,7 +69,7 @@ const appConfig = {
   },
   splashAds: existingSplashAds,
   version: now,
-  appVersion: "0.0.3",
+  appVersion: "0.0.8",
   maintenance: false,
   publicBaseUrl: publicBase,
   lanBaseUrl: lanBase,
@@ -85,7 +85,7 @@ class BootstrapConfig {
   BootstrapConfig._();
 
   static const publicBaseUrl = '${publicBase}';
-  static const appVersion = '0.0.3';
+  static const appVersion = '0.0.8';
   static const configUrls = <String>[
 ${configUrls.map((u) => `    '${u}',`).join("\n")}
   ];

@@ -9,5 +9,6 @@ User=golden
 WorkingDirectory=/home/golden/FAAI
 Environment=PATH=/home/golden/.local/bin:/usr/bin:/bin
 EnvironmentFile=-/home/golden/FAAI/config/apk-sync.env
-ExecStartPre=/usr/bin/npm ci --prefix /home/golden/FAAI/scripts --omit=dev
+# 依赖已安装时跳过 npm ci，避免无 /usr/bin/npm 时 203/EXEC
+ExecStartPre=/bin/bash -c 'test -d /home/golden/FAAI/scripts/node_modules/qrcode || /home/golden/.local/bin/npm ci --prefix /home/golden/FAAI/scripts --omit=dev'
 ExecStart=/home/golden/.local/bin/node /home/golden/FAAI/scripts/sync-apk-download.mjs

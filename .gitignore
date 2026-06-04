@@ -9,8 +9,9 @@ build/
 .flutter-plugins-dependencies
 .packages
 *.log
-.backend.log
-.admin.log
+*.log.*
+.backend.log*
+.admin.log*
 coverage/
 .idea/
 .vscode/
@@ -20,5 +21,11 @@ admin-web/node_modules/
 mobile-app/build/
 mobile-app/.dart_tool/
 config/apk-sync.env
+config/android-signing.env
+config/android-keystore.b64
+mobile-app/android/key.properties
+mobile-app/android/app/moyu-release.jks
+mobile-app/android/app/*.jks
+mobile-app/android/app/*.keystore
 config-server/public/download/app-release.apk
 config-server/public/download/version.json

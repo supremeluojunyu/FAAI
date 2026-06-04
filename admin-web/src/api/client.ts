@@ -78,6 +78,74 @@ export async function saveSplashAds(value: unknown) {
   return saveConfig("splash_ads", value, "App 启动广告页配置");
 }
 
+function pickConfig<T>(list: { key: string; value: T }[], key: string, fallback: T): T {
+  const row = list.find((x) => x.key === key);
+  return (row?.value as T) ?? fallback;
+}
+
+export async function fetchRechargePackages() {
+  const list = await fetchConfigs();
+  return pickConfig(list, "recharge_packages", {
+    enabled: true,
+    notice: "",
+    packages: []
+  });
+}
+
+export async function saveRechargePackages(value: unknown) {
+  return saveConfig("recharge_packages", value, "App 充值档位配置");
+}
+
+export async function fetchWalletConfig() {
+  const list = await fetchConfigs();
+  return pickConfig(list, "wallet_config", {
+    rechargeEnabled: true,
+    withdrawEnabled: false,
+    withdrawMin: 10,
+    withdrawTip: "",
+    balanceTip: ""
+  });
+}
+
+export async function saveWalletConfig(value: unknown) {
+  return saveConfig("wallet_config", value, "App 钱包页文案与开关");
+}
+
+export async function fetchCustomerService() {
+  const list = await fetchConfigs();
+  return pickConfig(list, "customer_service", {
+    phone: "",
+    wechat: "",
+    workHours: "",
+    helpUrl: ""
+  });
+}
+
+export async function saveCustomerService(value: unknown) {
+  return saveConfig("customer_service", value, "客服与帮助配置");
+}
+
+export async function fetchAppVersionPolicy() {
+  const list = await fetchConfigs();
+  return pickConfig(list, "app_version_policy", {
+    enabled: false,
+    minVersion: "0.0.0",
+    minBuildNumber: 0,
+    latestVersion: "",
+    latestBuildNumber: 0,
+    blockedVersions: [] as string[],
+    forceUpdate: true,
+    title: "需要更新 App",
+    message: "当前版本过低，请下载最新版本后继续使用。",
+    downloadPageUrl: "",
+    downloadApkUrl: ""
+  });
+}
+
+export async function saveAppVersionPolicy(value: unknown) {
+  return saveConfig("app_version_policy", value, "App 最低可用版本与强制更新");
+}
+
 export async function fetchUsers(params?: Record<string, string>) {
   const { data } = await api.get("/admin/users", { params });
   return data.data.list;
@@ -101,4 +169,14 @@ export async function fetchPosts() {
 export async function fetchDashboard() {
   const { data } = await api.get("/admin/statistics/dashboard");
   return data.data;
+}
+
+export async function fetchActivityLogs(params?: Record<string, string>) {
+  const { data } = await api.get("/admin/activity-logs", { params });
+  return data.data as {
+    list: unknown[];
+    total: number;
+    page: number;
+    action_stats: { action: string; count: number }[];
+  };
 }

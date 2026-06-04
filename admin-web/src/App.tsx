@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import { clearToken, isLoggedIn } from "./auth";
 import AdPage from "./pages/AdPage";
 import ConfigPage from "./pages/ConfigPage";
+import OpsConfigPage from "./pages/OpsConfigPage";
+import UserLogsPage from "./pages/UserLogsPage";
 import DashboardPage from "./pages/DashboardPage";
 import DemandPage from "./pages/DemandPage";
 import LoginPage from "./pages/LoginPage";
@@ -18,6 +20,8 @@ export default function App() {
 
   const page = useMemo(() => {
     if (active === "ads") return <AdPage />;
+    if (active === "ops") return <OpsConfigPage />;
+    if (active === "logs") return <UserLogsPage />;
     if (active === "configs") return <ConfigPage />;
     if (active === "users") return <UserPage />;
     if (active === "models") return <ModelPage />;
@@ -43,6 +47,8 @@ export default function App() {
           items={[
             { key: "dashboard", label: "数据看板" },
             { key: "ads", label: "广告管理" },
+            { key: "ops", label: "运营配置" },
+            { key: "logs", label: "用户日志" },
             { key: "configs", label: "系统配置" },
             { key: "users", label: "用户管理" },
             { key: "models", label: "模型管理" },

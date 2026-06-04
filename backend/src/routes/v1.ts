@@ -3,14 +3,20 @@ import { Router } from "express";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import { env } from "../config/env";
-import { authRequired, adminRequired } from "../middlewares/auth";
+import { activityAudit } from "../middlewares/activity-audit";
+import { appVersionGuard } from "../middlewares/app-version-guard";
+import { authRequired, adminRequired, optionalAuth } from "../middlewares/auth";
 import { prisma } from "../models/prisma";
+import { logUserActivity } from "../services/activity-log";
 import { publishAppConfig } from "../services/app-config-publish";
 import { sendSmsCode, verifySmsCode } from "../services/auth";
 import { getWechatOpenIdByCode } from "../services/wechat";
 import { fail, ok } from "../utils/response";
 
 export const v1Router = Router();
+
+v1Router.use(activityAudit);
+v1Router.use(appVersionGuard);
 
 type WorkbenchJobType = "PHOTO_TO_3D" | "UPLOAD_MODEL" | "FOOD_MOLD";
 type WorkbenchJobStatus = "PENDING" | "RUNNING" | "SUCCESS" | "FAILED";
@@ -89,6 +95,13 @@ v1Router.post("/auth/send-code", async (req, res) => {
   const parsed = z.object({ phone: z.string().min(11) }).safeParse(req.body);
   if (!parsed.success) return fail(res, 1001, "参数错误");
   const r = await sendSmsCode(parsed.data.phone);
+  await logUserActivity({
+    action: "SEND_SMS_CODE",
+    targetType: "phone",
+    targetId: parsed.data.phone.slice(-4).padStart(parsed.data.phone.length, "*"),
+    detail: { phone_tail: parsed.data.phone.slice(-4) },
+    req
+  });
   return ok(res, { expire_sec: r.expireSec, ...(r.debugCode ? { debug_code: r.debugCode } : {}) });
 });
 
@@ -102,18 +115,50 @@ v1Router.post("/auth/login", async (req, res) => {
     create: { phone: parsed.data.phone, role: "BUYER", status: "ACTIVE" }
   });
   const token = jwt.sign({ userId: user.id, role: user.role }, env.jwtSecret, { expiresIn: env.jwtExpiresIn } as jwt.SignOptions);
+  await logUserActivity({
+    userId: user.id,
+    action: "LOGIN_SMS",
+    targetType: "user",
+    targetId: user.id,
+    detail: { phone_tail: user.phone.slice(-4), role: user.role },
+    req
+  });
   return ok(res, { token, user });
 });
 
+const REAL_MOBILE_RE = /^1[3-9]\d{9}$/;
+
+function isRealMobilePhone(phone: string) {
+  return REAL_MOBILE_RE.test(phone.replace(/\D/g, "").slice(-11));
+}
+
+function normalizeOperatorName(operator?: string | null) {
+  const raw = (operator ?? "").trim();
+  if (!raw) return "运营商";
+  const u = raw.toUpperCase();
+  if (u.includes("MOBILE") || u.includes("CMCC") || raw.includes("移动")) return "中国移动";
+  if (u.includes("UNICOM") || u.includes("CUCC") || raw.includes("联通")) return "中国联通";
+  if (u.includes("TELECOM") || u.includes("CTCC") || raw.includes("电信")) return "中国电信";
+  return raw;
+}
+
+/** 真机号码优先；无法读取 SIM 号码时用设备 ID 生成内部账号（非 11 位假手机号） */
 function resolveCarrierPhone(input: { phone?: string; deviceId?: string }) {
   const raw = (input.phone ?? "").replace(/\D/g, "");
-  if (/^1\d{10}$/.test(raw)) return { phone: raw.slice(-11), fromDevice: false };
+  const normalized =
+    raw.length >= 11 && raw.startsWith("1") ? raw.slice(-11) : raw.length === 11 ? raw : "";
+  if (normalized && isRealMobilePhone(normalized)) {
+    return { phone: normalized, fromDevice: false };
+  }
   const id = (input.deviceId ?? "").trim();
   if (!id) return null;
-  const hex = crypto.createHash("sha256").update(id).digest("hex");
-  const digits = `${hex}0000000000`.replace(/\D/g, "");
-  const phone = `1${digits.slice(0, 10)}`;
-  return { phone, fromDevice: true };
+  const hex = crypto.createHash("sha256").update(id).digest("hex").slice(0, 24);
+  return { phone: `d${hex}`, fromDevice: true };
+}
+
+function carrierNickname(operator: string | undefined, fromDevice: boolean) {
+  const op = normalizeOperatorName(operator);
+  return fromDevice ? `${op}用户（本机认证）` : `${op}用户`;
 }
 
 v1Router.post("/auth/carrier-login", async (req, res) => {
@@ -129,7 +174,7 @@ v1Router.post("/auth/carrier-login", async (req, res) => {
   const resolved = resolveCarrierPhone(parsed.data);
   if (!resolved) return fail(res, 1001, "无法识别本机身份");
   const { phone, fromDevice } = resolved;
-  const nickname = parsed.data.operator ? `${parsed.data.operator}用户` : fromDevice ? "本机用户" : "用户";
+  const nickname = carrierNickname(parsed.data.operator, fromDevice);
   const user = await prisma.user.upsert({
     where: { phone },
     update: { nickname },
@@ -143,6 +188,18 @@ v1Router.post("/auth/carrier-login", async (req, res) => {
   const token = jwt.sign({ userId: user.id, role: user.role }, env.jwtSecret, {
     expiresIn: env.jwtExpiresIn
   } as jwt.SignOptions);
+  await logUserActivity({
+    userId: user.id,
+    action: "LOGIN_CARRIER",
+    targetType: "user",
+    targetId: user.id,
+    detail: {
+      operator: parsed.data.operator,
+      from_device: fromDevice,
+      phone_tail: phone.slice(-4)
+    },
+    req
+  });
   return ok(res, {
     token,
     user,
@@ -165,6 +222,14 @@ v1Router.post("/auth/guest", async (req, res) => {
   const token = jwt.sign({ userId: user.id, role: user.role, guest: true }, env.jwtSecret, {
     expiresIn: env.jwtExpiresIn
   } as jwt.SignOptions);
+  await logUserActivity({
+    userId: user.id,
+    action: "LOGIN_GUEST",
+    targetType: "user",
+    targetId: user.id,
+    detail: { phone_tail: resolved.phone.slice(-4) },
+    req
+  });
   return ok(res, { token, user, guest: true });
 });
 
@@ -200,10 +265,38 @@ v1Router.post("/auth/wechat/login", async (req, res) => {
     const token = jwt.sign({ userId: user.id, role: user.role }, env.jwtSecret, {
       expiresIn: env.jwtExpiresIn
     } as jwt.SignOptions);
+    await logUserActivity({
+      userId: user.id,
+      action: "LOGIN_WECHAT",
+      targetType: "user",
+      targetId: user.id,
+      req
+    });
     return ok(res, { token, user, wechat: { openid: wx.openid, unionid: wx.unionid } });
   } catch (e) {
     return fail(res, 1002, e instanceof Error ? e.message : "微信登录失败");
   }
+});
+
+v1Router.post("/user/activity", authRequired, async (req, res) => {
+  const parsed = z
+    .object({
+      action: z.string().min(1),
+      target_type: z.string().optional(),
+      target_id: z.string().optional(),
+      detail: z.record(z.unknown()).optional()
+    })
+    .safeParse(req.body);
+  if (!parsed.success) return fail(res, 1001, "参数错误");
+  await logUserActivity({
+    userId: req.auth!.userId,
+    action: parsed.data.action,
+    targetType: parsed.data.target_type,
+    targetId: parsed.data.target_id,
+    detail: parsed.data.detail,
+    req
+  });
+  return ok(res, { logged: true });
 });
 
 v1Router.get("/user/favorites", authRequired, async (req, res) => {
@@ -255,15 +348,30 @@ v1Router.get("/models", async (req, res) => {
   return ok(res, { list, total });
 });
 
-v1Router.get("/models/:id", async (req, res) => {
+v1Router.get("/models/:id", optionalAuth, async (req, res) => {
   const model = await prisma.model.findUnique({ where: { id: req.params.id }, include: { designer: true } });
   if (!model) return fail(res, 1001, "模型不存在");
+  await prisma.model.update({ where: { id: model.id }, data: { viewCount: { increment: 1 } } });
+  let isFavorited = false;
+  let isLiked = false;
+  if (req.auth) {
+    const [fav, like] = await Promise.all([
+      prisma.modelFavorite.findUnique({
+        where: { userId_modelId: { userId: req.auth.userId, modelId: model.id } }
+      }),
+      prisma.modelLike.findUnique({
+        where: { userId_modelId: { userId: req.auth.userId, modelId: model.id } }
+      })
+    ]);
+    isFavorited = !!fav;
+    isLiked = !!like;
+  }
   return ok(res, {
-    model,
+    model: { ...model, viewCount: model.viewCount + 1 },
     images: [],
     designer_info: model.designer,
-    is_favorited: false,
-    is_liked: false
+    is_favorited: isFavorited,
+    is_liked: isLiked
   });
 });
 
@@ -272,12 +380,18 @@ v1Router.post("/models/:id/favorite", authRequired, async (req, res) => {
   const found = await prisma.modelFavorite.findUnique({ where });
   if (found) {
     await prisma.modelFavorite.delete({ where });
-    await prisma.model.update({ where: { id: req.params.id }, data: { favoriteCount: { decrement: 1 } } });
-    return ok(res, { is_favorited: false });
+    const model = await prisma.model.update({
+      where: { id: req.params.id },
+      data: { favoriteCount: { decrement: 1 } }
+    });
+    return ok(res, { is_favorited: false, favorite_count: model.favoriteCount });
   }
   await prisma.modelFavorite.create({ data: { userId: req.auth!.userId, modelId: req.params.id } });
-  await prisma.model.update({ where: { id: req.params.id }, data: { favoriteCount: { increment: 1 } } });
-  return ok(res, { is_favorited: true });
+  const model = await prisma.model.update({
+    where: { id: req.params.id },
+    data: { favoriteCount: { increment: 1 } }
+  });
+  return ok(res, { is_favorited: true, favorite_count: model.favoriteCount });
 });
 
 v1Router.post("/models/:id/like", authRequired, async (req, res) => {
@@ -291,6 +405,16 @@ v1Router.post("/models/:id/like", authRequired, async (req, res) => {
   await prisma.modelLike.create({ data: { userId: req.auth!.userId, modelId: req.params.id } });
   const model = await prisma.model.update({ where: { id: req.params.id }, data: { likeCount: { increment: 1 } } });
   return ok(res, { is_liked: true, like_count: model.likeCount });
+});
+
+v1Router.post("/models/:id/share", authRequired, async (req, res) => {
+  const model = await prisma.model.findUnique({ where: { id: req.params.id } });
+  if (!model) return fail(res, 1001, "模型不存在");
+  return ok(res, {
+    share_title: model.title,
+    share_text: `模宇宙(糖艺大模王) - ${model.title}`,
+    share_url: `/models/${model.id}`
+  });
 });
 
 v1Router.get("/models/search", async (req, res) => {
@@ -642,9 +766,28 @@ v1Router.get("/designer/statistics", authRequired, async (req, res) => {
   return ok(res, { views, favorites, sales, revenue, days: Number(req.query.days || 30) });
 });
 
-v1Router.get("/posts", async (_req, res) => {
-  const list = await prisma.post.findMany({ orderBy: { createdAt: "desc" }, take: 20 });
-  return ok(res, { list });
+v1Router.get("/posts", optionalAuth, async (req, res) => {
+  const list = await prisma.post.findMany({
+    where: { status: "PUBLISHED" },
+    include: { user: { select: { id: true, nickname: true, avatar: true, phone: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 50
+  });
+  let likedIds = new Set<string>();
+  if (req.auth) {
+    const likes = await prisma.postLike.findMany({
+      where: { userId: req.auth.userId, postId: { in: list.map((p) => p.id) } },
+      select: { postId: true }
+    });
+    likedIds = new Set(likes.map((l) => l.postId));
+  }
+  return ok(res, {
+    list: list.map((p) => ({
+      ...p,
+      author: p.user,
+      is_liked: likedIds.has(p.id)
+    }))
+  });
 });
 
 v1Router.post("/posts", authRequired, async (req, res) => {
@@ -665,25 +808,52 @@ v1Router.post("/posts", authRequired, async (req, res) => {
   return ok(res, { post_id: post.id });
 });
 
-v1Router.get("/posts/:id", async (req, res) => {
-  const post = await prisma.post.findUnique({ where: { id: req.params.id } });
+v1Router.get("/posts/:id", optionalAuth, async (req, res) => {
+  const post = await prisma.post.findUnique({
+    where: { id: req.params.id },
+    include: { user: { select: { id: true, nickname: true, avatar: true } } }
+  });
   if (!post) return fail(res, 1001, "动态不存在");
-  const comments = await prisma.comment.findMany({ where: { postId: req.params.id }, orderBy: { createdAt: "asc" } });
-  return ok(res, { post, comments, is_liked: false });
+  const comments = await prisma.comment.findMany({
+    where: { postId: req.params.id },
+    orderBy: { createdAt: "asc" },
+    include: { user: { select: { id: true, nickname: true } } }
+  });
+  let isLiked = false;
+  if (req.auth) {
+    const found = await prisma.postLike.findUnique({
+      where: { postId_userId: { postId: post.id, userId: req.auth.userId } }
+    });
+    isLiked = !!found;
+  }
+  return ok(res, { post, comments, is_liked: isLiked });
 });
 
 v1Router.post("/posts/:id/like", authRequired, async (req, res) => {
   const where = { postId_userId: { postId: req.params.id, userId: req.auth!.userId } };
   const found = await prisma.postLike.findUnique({ where });
   let post;
+  let isLiked: boolean;
   if (found) {
     await prisma.postLike.delete({ where });
     post = await prisma.post.update({ where: { id: req.params.id }, data: { likeCount: { decrement: 1 } } });
+    isLiked = false;
   } else {
     await prisma.postLike.create({ data: { postId: req.params.id, userId: req.auth!.userId } });
     post = await prisma.post.update({ where: { id: req.params.id }, data: { likeCount: { increment: 1 } } });
+    isLiked = true;
   }
-  return ok(res, { like_count: post.likeCount });
+  return ok(res, { is_liked: isLiked, like_count: post.likeCount });
+});
+
+v1Router.post("/posts/:id/share", authRequired, async (req, res) => {
+  const post = await prisma.post.findUnique({ where: { id: req.params.id } });
+  if (!post) return fail(res, 1001, "动态不存在");
+  return ok(res, {
+    share_title: "模宇宙社区动态",
+    share_text: post.content.slice(0, 120),
+    share_url: `/posts/${post.id}`
+  });
 });
 
 v1Router.post("/comments", authRequired, async (req, res) => {
@@ -713,7 +883,9 @@ v1Router.get("/wallet/balance", authRequired, async (req, res) => {
   return ok(res, { balance: user?.balance || 0 });
 });
 v1Router.post("/wallet/recharge", authRequired, async (req, res) => {
-  const parsed = z.object({ amount: z.coerce.number().positive(), channel: z.string() }).safeParse(req.body);
+  const parsed = z
+    .object({ amount: z.coerce.number().positive(), channel: z.string().optional().default("mock") })
+    .safeParse(req.body);
   if (!parsed.success) return fail(res, 1001, "参数错误");
   const tx = await prisma.transaction.create({ data: { userId: req.auth!.userId, amount: parsed.data.amount, type: "RECHARGE", status: "PENDING" } });
   return ok(res, { pay_params: { trade_no: tx.id, channel: parsed.data.channel } });
@@ -800,4 +972,46 @@ v1Router.get("/admin/statistics/dashboard", authRequired, adminRequired, async (
   const paidOrders = await prisma.order.findMany({ where: { payStatus: "PAID" }, select: { amount: true } });
   const revenue = paidOrders.reduce((sum, x) => sum + Number(x.amount), 0);
   return ok(res, { total_users, total_models, total_orders, revenue });
+});
+
+v1Router.get("/admin/activity-logs", authRequired, adminRequired, async (req, res) => {
+  const page = Math.max(1, Number(req.query.page || 1));
+  const size = Math.min(100, Math.max(10, Number(req.query.size || 30)));
+  const action = req.query.action ? String(req.query.action) : undefined;
+  const userId = req.query.user_id ? String(req.query.user_id) : undefined;
+  const phone = req.query.phone ? String(req.query.phone) : undefined;
+  const where: {
+    action?: string;
+    userId?: string;
+    user?: { phone?: { contains: string } };
+  } = {};
+  if (action) where.action = action;
+  if (userId) where.userId = userId;
+  if (phone) where.user = { phone: { contains: phone } };
+
+  const [list, total] = await Promise.all([
+    prisma.userActivityLog.findMany({
+      where,
+      include: { user: { select: { id: true, phone: true, nickname: true, role: true } } },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * size,
+      take: size
+    }),
+    prisma.userActivityLog.count({ where })
+  ]);
+
+  const actionStats = await prisma.userActivityLog.groupBy({
+    by: ["action"],
+    _count: { action: true },
+    orderBy: { _count: { action: "desc" } },
+    take: 20
+  });
+
+  return ok(res, {
+    list,
+    total,
+    page,
+    size,
+    action_stats: actionStats.map((s) => ({ action: s.action, count: s._count.action }))
+  });
 });

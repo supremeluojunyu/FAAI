@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'api_dio.dart';
 import 'auth_service.dart';
 import 'model_service.dart';
 
@@ -10,10 +11,7 @@ class UserHubService {
 
   static const _historyKey = 'browse_history_v1';
 
-  Dio _authDio() {
-    final dio = Dio(BaseOptions(baseUrl: baseUrl, connectTimeout: const Duration(seconds: 10)));
-    return dio;
-  }
+  Dio _authDio() => createApiDio(baseUrl);
 
   Future<String?> _token() => AuthService(baseUrl).getLocalToken();
 
@@ -34,6 +32,18 @@ class UserHubService {
 
   Future<Map<String, dynamic>> fetchWallet() async {
     return _get('/wallet/balance');
+  }
+
+  Future<Map<String, dynamic>> recharge({required double amount}) async {
+    final token = await _token();
+    final resp = await _authDio().post(
+      '/wallet/recharge',
+      data: {'amount': amount, 'channel': 'mock'},
+      options: Options(headers: {'Authorization': 'Bearer $token'}),
+    );
+    final body = (resp.data as Map).cast<String, dynamic>();
+    if ((body['code'] as num? ?? 0) != 0) throw Exception((body['message'] ?? '充值失败').toString());
+    return (body['data'] as Map?)?.cast<String, dynamic>() ?? {};
   }
 
   Future<Map<String, dynamic>> fetchProfile() async {

@@ -93,10 +93,7 @@ class MainActivity : FlutterActivity() {
             if (phone != null) break
         }
 
-        val operator = when (tm.simOperatorName?.trim()) {
-            "", null -> detectOperator(phone) ?: "运营商"
-            else -> tm.simOperatorName
-        }
+        val operator = normalizeOperatorName(tm.simOperatorName) ?: detectOperator(phone) ?: "运营商"
         val simReady = if (tm.simState == TelephonyManager.SIM_STATE_READY) "true" else "false"
 
         return mapOf(
@@ -126,6 +123,18 @@ class MainActivity : FlutterActivity() {
             else -> null
         }
         return if (phone != null && phone.startsWith("1")) phone else null
+    }
+
+    private fun normalizeOperatorName(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val name = raw.trim()
+        val u = name.uppercase()
+        return when {
+            u.contains("CMCC") || u.contains("MOBILE") || name.contains("移动") -> "中国移动"
+            u.contains("UNICOM") || u.contains("CUCC") || name.contains("联通") -> "中国联通"
+            u.contains("TELECOM") || u.contains("CTCC") || name.contains("电信") -> "中国电信"
+            else -> name
+        }
     }
 
     private fun detectOperator(phone: String?): String? {

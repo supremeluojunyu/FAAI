@@ -1,37 +1,36 @@
 #!/usr/bin/env bash
-# 在 HTTPS 被重置的网络环境下，通过 SSH 推送 GitHub
+# 使用 config/apk-sync.env 中的 GITHUB_TOKEN（ghp_）经镜像推送，避免直连被重置
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-REMOTE_SSH="git@github.com:supremeluojunyu/FAAI.git"
-PUBKEY_FILE="${HOME}/.ssh/id_ed25519.pub"
+ENV_FILE="${ROOT}/config/apk-sync.env"
+REPO="supremeluojunyu/FAAI"
+MIRROR_BASE="https://ghproxy.net/https://github.com/${REPO}.git"
 
-echo "==> 配置 origin 为 SSH"
-git remote set-url origin "$REMOTE_SSH"
-
-if [[ ! -f "$PUBKEY_FILE" ]]; then
-  echo "未找到 SSH 公钥，正在生成..."
-  ssh-keygen -t ed25519 -N "" -f "${HOME}/.ssh/id_ed25519"
+if [[ -f "$ENV_FILE" ]]; then
+  # shellcheck disable=SC1090
+  set -a && source "$ENV_FILE" && set +a
 fi
 
-echo ""
-echo "请将以下公钥添加到 GitHub: https://github.com/settings/ssh/new"
-echo "名称可填: golden120"
-echo "----------------------------------------"
-cat "$PUBKEY_FILE"
-echo "----------------------------------------"
-echo ""
-
-echo "==> 测试 SSH 连接"
-if ssh -o BatchMode=yes -T git@github.com 2>&1 | grep -qi "successfully authenticated"; then
-  echo "SSH 已就绪，开始推送..."
-  git push origin main
-  if git rev-parse v0.0.5 >/dev/null 2>&1; then
-    git push origin v0.0.5
-  fi
-  echo "推送完成。等待 GitHub Actions 构建 APK 后执行: node scripts/sync-apk-download.mjs"
-else
-  echo "SSH 尚未授权。添加公钥后重新运行: bash scripts/git-push-github.sh"
+if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+  echo "未找到 GITHUB_TOKEN。请写入 ${ENV_FILE}（可参考 config/apk-sync.env.example）"
+  echo "或执行: gh auth login && gh auth token > ${ENV_FILE}"
   exit 1
 fi
+
+echo "==> 配置 origin（HTTPS + 镜像 + PAT）"
+git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@${MIRROR_BASE#https://}"
+
+TAG="${1:-}"
+echo "==> 推送 main"
+git push origin main
+
+if [[ -n "$TAG" ]]; then
+  echo "==> 推送标签 ${TAG}"
+  git push origin "$TAG"
+elif git rev-parse v0.0.6 >/dev/null 2>&1; then
+  git push origin v0.0.6 2>/dev/null || true
+fi
+
+echo "推送完成。等待 GitHub Actions 构建 APK 后执行: node scripts/sync-apk-download.mjs"

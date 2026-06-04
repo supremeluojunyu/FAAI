@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/activity_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/carrier_phone_service.dart';
 import '../../services/user_hub_service.dart';
@@ -26,6 +27,7 @@ class _MinePageState extends State<MinePage> {
   @override
   void initState() {
     super.initState();
+    ActivityService(widget.apiBaseUrl).logPage('mine');
     _loadProfile();
   }
 
@@ -48,7 +50,8 @@ class _MinePageState extends State<MinePage> {
     });
   }
 
-  void _open(Widget page) {
+  void _open(Widget page, String pageName) {
+    ActivityService(widget.apiBaseUrl).logPage(pageName);
     Navigator.push(context, MaterialPageRoute(builder: (_) => page));
   }
 
@@ -79,17 +82,17 @@ class _MinePageState extends State<MinePage> {
 
   @override
   Widget build(BuildContext context) {
-    final subtitle = _phone != null && _phone!.length == 11
+    final subtitle = CarrierPhoneService.isRealMobile(_phone)
         ? CarrierPhoneService.maskPhone(_phone!)
-        : '未绑定手机号';
+        : '未绑定真实手机号（可退出后用短信登录）';
 
     final menus = <(String, IconData, VoidCallback)>[
-      ('我的收藏', Icons.favorite_border, () => _open(FavoritesPage(apiBaseUrl: widget.apiBaseUrl))),
-      ('浏览足迹', Icons.history, () => _open(HistoryPage(apiBaseUrl: widget.apiBaseUrl))),
-      ('草稿箱', Icons.drafts_outlined, () => _open(DraftsPage(apiBaseUrl: widget.apiBaseUrl))),
-      ('钱包', Icons.account_balance_wallet_outlined, () => _open(WalletPage(apiBaseUrl: widget.apiBaseUrl))),
-      ('设置', Icons.settings_outlined, () => _open(SettingsPage(apiBaseUrl: widget.apiBaseUrl))),
-      ('客服帮助', Icons.help_outline, () => _open(const HelpPage())),
+      ('我的收藏', Icons.favorite_border, () => _open(FavoritesPage(apiBaseUrl: widget.apiBaseUrl), 'favorites')),
+      ('浏览足迹', Icons.history, () => _open(HistoryPage(apiBaseUrl: widget.apiBaseUrl), 'history')),
+      ('草稿箱', Icons.drafts_outlined, () => _open(DraftsPage(apiBaseUrl: widget.apiBaseUrl), 'drafts')),
+      ('钱包', Icons.account_balance_wallet_outlined, () => _open(WalletPage(apiBaseUrl: widget.apiBaseUrl), 'wallet')),
+      ('设置', Icons.settings_outlined, () => _open(SettingsPage(apiBaseUrl: widget.apiBaseUrl), 'settings')),
+      ('客服帮助', Icons.help_outline, () => _open(const HelpPage(), 'help')),
     ];
 
     return Scaffold(

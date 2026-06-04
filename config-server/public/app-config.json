@@ -7,14 +7,6 @@
     "maxUploadSizeMB": 200,
     "enableCommunity": true
   },
-  "version": "2026-06-04T06:56:45.887Z",
-  "appVersion": "0.0.3",
-  "maintenance": false,
-  "publicBaseUrl": "http://124.220.4.69:8081",
-  "lanBaseUrl": "http://192.168.3.21",
-  "apkDownloadUrl": "http://124.220.4.69:8081/download/app-release.apk",
-  "apkPageUrl": "http://124.220.4.69:8081/download/",
-  "apkVersion": "v0.0.5",
   "splashAds": {
     "items": [
       {
@@ -28,5 +20,13 @@
     "enabled": true,
     "durationSec": 5,
     "skipAfterSec": 2
-  }
+  },
+  "version": "2026-06-04T15:40:23.024Z",
+  "appVersion": "0.0.3",
+  "maintenance": false,
+  "publicBaseUrl": "http://124.220.4.69:8081",
+  "lanBaseUrl": "http://192.168.3.21",
+  "apkDownloadUrl": "http://124.220.4.69:8081/download/app-release.apk",
+  "apkPageUrl": "http://124.220.4.69:8081/download/",
+  "apkVersion": "v0.0.6"
 }

@@ -16,15 +16,27 @@ declare global {
   }
 }
 
-export function authRequired(req: Request, res: Response, next: NextFunction) {
+function parseToken(req: Request): JwtPayload | null {
   const token = req.headers.authorization?.replace("Bearer ", "");
-  if (!token) return fail(res, 1002, "未登录");
+  if (!token) return null;
   try {
-    req.auth = jwt.verify(token, env.jwtSecret) as JwtPayload;
-    next();
+    return jwt.verify(token, env.jwtSecret) as JwtPayload;
   } catch {
-    return fail(res, 1002, "登录已过期");
+    return null;
   }
+}
+
+/** 有 token 则解析用户，无 token 也放行 */
+export function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+  req.auth = parseToken(req) ?? undefined;
+  next();
+}
+
+export function authRequired(req: Request, res: Response, next: NextFunction) {
+  const payload = parseToken(req);
+  if (!payload) return fail(res, 1002, "未登录或登录已过期");
+  req.auth = payload;
+  next();
 }
 
 export function adminRequired(req: Request, res: Response, next: NextFunction) {
