@@ -68,27 +68,34 @@ class AuthService {
     await saveToken(token);
   }
 
-  Future<void> loginByCarrier({required String phone, String? operator}) async {
+  Future<void> loginByCarrier({String? phone, String? operator, String? deviceId}) async {
     final resp = await _dio().post('/auth/carrier-login', data: {
-      'phone': phone,
+      if (phone != null && phone.isNotEmpty) 'phone': phone,
       if (operator != null) 'operator': operator,
+      if (deviceId != null) 'deviceId': deviceId,
     });
     final data = (resp.data as Map<String, dynamic>)['data'] as Map<String, dynamic>? ?? {};
     final token = (data['token'] ?? '').toString();
     if (token.isEmpty) throw Exception('一键登录失败：token为空');
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_isGuestKey, false);
-    await prefs.setString(_guestPhoneKey, phone);
+    final savedPhone = ((data['user'] as Map?)?['phone'] ?? phone ?? '').toString();
+    await prefs.setString(_guestPhoneKey, savedPhone);
     await saveToken(token);
   }
 
-  Future<void> loginAsGuest(String phone) async {
-    final resp = await _dio().post('/auth/guest', data: {'phone': phone});
+  Future<void> loginAsGuest({String? phone, String? deviceId, String? operator}) async {
+    final resp = await _dio().post('/auth/guest', data: {
+      if (phone != null && phone.isNotEmpty) 'phone': phone,
+      if (deviceId != null) 'deviceId': deviceId,
+      if (operator != null) 'operator': operator,
+    });
     final data = (resp.data as Map<String, dynamic>)['data'] as Map<String, dynamic>? ?? {};
     final token = (data['token'] ?? '').toString();
     if (token.isEmpty) throw Exception('游客进入失败：token为空');
+    final savedPhone = ((data['user'] as Map?)?['phone'] ?? phone ?? '').toString();
     await saveToken(token);
-    await saveGuestPhone(phone);
+    await saveGuestPhone(savedPhone);
   }
 
   Future<void> loginByWechatCode(String wechatCode) async {

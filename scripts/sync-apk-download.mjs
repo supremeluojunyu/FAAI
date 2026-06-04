@@ -127,7 +127,9 @@ function renderIndex(meta) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>模宇宙(糖艺大模王) App 下载</title>
+  <title>模宇宙(糖艺大模王) App 下载 ${meta.tag_name}</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
   <style>
     * { box-sizing: border-box; }
     body { font-family: system-ui, -apple-system, sans-serif; max-width: 520px; margin: 32px auto; padding: 0 16px 48px; color: #1f1f1f; background: #f7f8fa; }
@@ -145,10 +147,11 @@ function renderIndex(meta) {
 <body>
   <div class="card">
     <h1>模宇宙(糖艺大模王) Android App</h1>
+    <p style="color:#1677ff;font-weight:700;font-size:18px;margin:0 0 12px">当前版本 ${meta.tag_name}</p>
     <p class="sub">扫码或点击下方按钮，下载最新 APK 安装包</p>
     <div class="qr-wrap"><img src="qr.png?v=${Date.now()}" alt="扫码下载 APK" width="240" height="240" /></div>
     <p class="qr-tip">手机扫码直接下载</p>
-    <a class="btn" href="${apkUrl}">下载 APK（${meta.tag_name}）</a>
+    <a class="btn" href="${apkUrl}?v=${meta.tag_name}">下载 APK（${meta.tag_name}）</a>
     <div class="meta">
       <div>版本：<code>${meta.tag_name}</code></div>
       <div>大小：${meta.size_mb} MB</div>

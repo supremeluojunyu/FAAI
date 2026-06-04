@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Router } from "express";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
@@ -104,36 +105,62 @@ v1Router.post("/auth/login", async (req, res) => {
   return ok(res, { token, user });
 });
 
+function resolveCarrierPhone(input: { phone?: string; deviceId?: string }) {
+  const raw = (input.phone ?? "").replace(/\D/g, "");
+  if (/^1\d{10}$/.test(raw)) return { phone: raw.slice(-11), fromDevice: false };
+  const id = (input.deviceId ?? "").trim();
+  if (!id) return null;
+  const hex = crypto.createHash("sha256").update(id).digest("hex");
+  const digits = `${hex}0000000000`.replace(/\D/g, "");
+  const phone = `1${digits.slice(0, 10)}`;
+  return { phone, fromDevice: true };
+}
+
 v1Router.post("/auth/carrier-login", async (req, res) => {
   const parsed = z
-    .object({ phone: z.string().min(11), operator: z.string().optional(), carrierToken: z.string().optional() })
+    .object({
+      phone: z.string().optional(),
+      operator: z.string().optional(),
+      carrierToken: z.string().optional(),
+      deviceId: z.string().optional()
+    })
     .safeParse(req.body);
   if (!parsed.success) return fail(res, 1001, "参数错误");
-  const phone = parsed.data.phone.replace(/\D/g, "").slice(-11);
-  if (!/^1\d{10}$/.test(phone)) return fail(res, 1001, "手机号无效");
+  const resolved = resolveCarrierPhone(parsed.data);
+  if (!resolved) return fail(res, 1001, "无法识别本机身份");
+  const { phone, fromDevice } = resolved;
+  const nickname = parsed.data.operator ? `${parsed.data.operator}用户` : fromDevice ? "本机用户" : "用户";
   const user = await prisma.user.upsert({
     where: { phone },
-    update: { nickname: parsed.data.operator ? `${parsed.data.operator}用户` : undefined },
+    update: { nickname },
     create: {
       phone,
       role: "BUYER",
       status: "ACTIVE",
-      nickname: parsed.data.operator ? `${parsed.data.operator}用户` : "用户"
+      nickname
     }
   });
   const token = jwt.sign({ userId: user.id, role: user.role }, env.jwtSecret, {
     expiresIn: env.jwtExpiresIn
   } as jwt.SignOptions);
-  return ok(res, { token, user, carrier: { operator: parsed.data.operator ?? null } });
+  return ok(res, {
+    token,
+    user,
+    carrier: { operator: parsed.data.operator ?? null, from_device: fromDevice }
+  });
 });
 
 v1Router.post("/auth/guest", async (req, res) => {
-  const parsed = z.object({ phone: z.string().min(11) }).safeParse(req.body);
+  const parsed = z
+    .object({ phone: z.string().optional(), deviceId: z.string().optional(), operator: z.string().optional() })
+    .safeParse(req.body);
   if (!parsed.success) return fail(res, 1001, "参数错误");
+  const resolved = resolveCarrierPhone(parsed.data);
+  if (!resolved) return fail(res, 1001, "无法识别本机身份");
   const user = await prisma.user.upsert({
-    where: { phone: parsed.data.phone },
-    update: {},
-    create: { phone: parsed.data.phone, role: "BUYER", status: "ACTIVE", nickname: "游客" }
+    where: { phone: resolved.phone },
+    update: { nickname: "游客" },
+    create: { phone: resolved.phone, role: "BUYER", status: "ACTIVE", nickname: "游客" }
   });
   const token = jwt.sign({ userId: user.id, role: user.role, guest: true }, env.jwtSecret, {
     expiresIn: env.jwtExpiresIn

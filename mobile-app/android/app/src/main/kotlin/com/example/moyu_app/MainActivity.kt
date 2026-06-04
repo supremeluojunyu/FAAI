@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
 import androidx.core.app.ActivityCompat
@@ -14,49 +15,95 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val channelName = "com.example.moyu_app/carrier"
+    private val reqPhone = 9101
+    private var pendingCarrierResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName).setMethodCallHandler { call, result ->
             when (call.method) {
-                "getCarrierPhone" -> {
-                    try {
-                        val data = readCarrierPhone(applicationContext)
-                        result.success(data)
-                    } catch (e: Exception) {
-                        result.error("CARRIER_ERROR", e.message, null)
-                    }
-                }
+                "getCarrierPhone" -> requestCarrierPhone(result)
                 else -> result.notImplemented()
             }
         }
     }
 
+    private fun requestCarrierPhone(result: MethodChannel.Result) {
+        if (hasPhonePermission(this)) {
+            result.success(readCarrierInfo(this))
+            return
+        }
+        pendingCarrierResult = result
+        val perms = mutableListOf(
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.READ_PHONE_NUMBERS
+        )
+        ActivityCompat.requestPermissions(this, perms.toTypedArray(), reqPhone)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != reqPhone) return
+        val pending = pendingCarrierResult ?: return
+        pendingCarrierResult = null
+        pending.success(readCarrierInfo(this))
+    }
+
     @SuppressLint("MissingPermission", "HardwareIds")
-    private fun readCarrierPhone(context: Context): Map<String, String?> {
-        if (!hasPhonePermission(context)) {
-            return mapOf("phone" to null, "operator" to null, "error" to "permission_denied")
+    private fun readCarrierInfo(context: Context): Map<String, String?> {
+        val deviceId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+        val hasPerm = hasPhonePermission(context)
+        if (!hasPerm) {
+            return mapOf(
+                "phone" to null,
+                "operator" to null,
+                "deviceId" to deviceId,
+                "simReady" to "false",
+                "error" to "permission_denied"
+            )
         }
 
         val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-        var raw = tm.line1Number
-        if (raw.isNullOrBlank() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+        val candidates = mutableListOf<String?>()
+        candidates.add(tm.line1Number)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
             val sm = context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as SubscriptionManager
             val subs = sm.activeSubscriptionInfoList
             if (!subs.isNullOrEmpty()) {
-                raw = subs[0].number
+                for (info in subs) {
+                    candidates.add(info.number)
+                    if (Build.VERSION.SDK_INT >= 33) {
+                        try {
+                            candidates.add(sm.getPhoneNumber(info.subscriptionId))
+                        } catch (_: Exception) {
+                        }
+                    }
+                }
             }
         }
 
-        val phone = normalizePhone(raw)
+        var phone: String? = null
+        for (raw in candidates) {
+            phone = normalizePhone(raw)
+            if (phone != null) break
+        }
+
         val operator = when (tm.simOperatorName?.trim()) {
-            "", null -> detectOperator(phone)
+            "", null -> detectOperator(phone) ?: "运营商"
             else -> tm.simOperatorName
         }
+        val simReady = if (tm.simState == TelephonyManager.SIM_STATE_READY) "true" else "false"
 
         return mapOf(
             "phone" to phone,
             "operator" to operator,
+            "deviceId" to deviceId,
+            "simReady" to simReady,
             "error" to if (phone == null) "number_unavailable" else null
         )
     }
